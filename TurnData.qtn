@@ -1,0 +1,40 @@
+﻿import PlayCommandData;
+import SkipCommandData;
+
+asset TurnConfig;
+
+enum TurnType { Play, Countdown }
+enum TurnStatus { Inactive, Active, Resolving }
+enum TurnEndReason { Time, Skip, Play, Resolved }
+
+struct TurnData
+{
+    player_ref Player;
+    entity_ref Entity;
+    asset_ref<TurnConfig> ConfigRef;
+    TurnType Type;
+    TurnStatus Status;
+    Int32 Number;
+    Int32 Ticks;
+}
+
+global {
+    TurnData CurrentTurn;
+}
+
+// ------------------ Signals ------------------
+signal OnTurnEnded           (TurnData data, TurnEndReason reason);
+signal OnPlayCommandReceived (PlayerRef player, PlayCommandData data);
+signal OnSkipCommandReceived (PlayerRef player, SkipCommandData data);
+
+// ------------------ Events ------------------
+abstract event TurnEvent                   { TurnData      Turn; }
+synced event TurnTypeChanged   : TurnEvent { TurnType      PreviousType; }
+synced event TurnStatusChanged : TurnEvent { TurnStatus    PreviousStatus; }
+synced event TurnEnded         : TurnEvent { TurnEndReason Reason; }
+synced event TurnTimerReset    : TurnEvent { }
+synced event TurnActivated     : TurnEvent { }
+
+abstract event CommandEvent              { player_ref Player; }
+event PlayCommandReceived : CommandEvent { PlayCommandData Data; }
+event SkipCommandReceived : CommandEvent { SkipCommandData Data; }
