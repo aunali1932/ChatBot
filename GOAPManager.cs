@@ -16,7 +16,7 @@ namespace Quantum
 
 		// PUBLIC METHODS
 
-		public static void Initialize(Frame frame, EntityRef entity, GOAPRoot root, GOAPAStar.HeuristicCost heuristicCost = null)
+		public static void Initialize(Frame frame, EntityRef entity, GOAPRoot root)
 		{
 			var agent = frame.Unsafe.GetPointer<GOAPAgent>(entity);
 			agent->Root = root;
@@ -29,24 +29,7 @@ namespace Quantum
 
 			agent->GoalDisableTimes = disableTimes;
 
-			if (heuristicCost != null)
-			{
-				_heuristicCost = heuristicCost;
-			}
-			else if (_heuristicCost == null)
-			{
-				switch (sizeof(EWorldState))
-				{
-					case 4:
-						_heuristicCost = GOAPHeuristic.BitmaskDifferenceUInt32;
-						break;
-					//case 8:
-					//	_heuristicCost = GOAPHeuristic.BitmaskDifferenceUInt64;
-					//	break;
-					default:
-						throw new NotImplementedException($"Heuristic for EWorldState size of {sizeof(EWorldState)} bytes is not implemented");
-				}
-			}
+			PrepareHeuristicCost(frame, null);
 		}
 
 		public static void Deinitialize(Frame frame, EntityRef entity)
@@ -61,6 +44,13 @@ namespace Quantum
 
 		public static void Update(Frame frame, EntityRef entity, FP deltaTime)
 		{
+			if (_heuristicCost == null)
+			{
+				// We are trying to update GOAP without proper initialization, this can happen after late joins
+				frame.Unsafe.TryGetPointerSingleton(out GOAPData* goapData);
+				PrepareHeuristicCost(frame, goapData != null ? frame.FindAsset<GOAPHeuristic>(goapData->HeuristicCost.Id) : null);
+			}
+
 			var context = GetContext(frame, entity);
 			var agent = context.Agent;
 
@@ -130,6 +120,14 @@ namespace Quantum
 				var disableTimes = frame.ResolveList(agent->GoalDisableTimes);
 				disableTimes[goalIndex] = disableTime;
 			}
+		}
+
+		public static void SetCustomHeuristicCost(Frame frame, GOAPHeuristic heuristicCost)
+		{
+			if (heuristicCost == null)
+				return;
+
+			PrepareHeuristicCost(frame, heuristicCost);
 		}
 
 		// PRIVATE METHODS
@@ -412,6 +410,45 @@ namespace Quantum
 			// Plan object is part of pooled GOAPAStar object
 			// so GOAPAStar needs to be returned after plan is no longer needed
 			Pool<GOAPAStar>.Return(aStar);
+		}
+
+		private static void PrepareHeuristicCost(Frame frame, GOAPHeuristic customHeuristicCost)
+		{
+			if (customHeuristicCost == null)
+			{
+				if (_heuristicCost != null)
+					return; // No change
+
+				switch (sizeof(EWorldState))
+				{
+					case 4:
+						_heuristicCost = GOAPDefaultHeuristic.BitmaskDifferenceUInt32;
+						break;
+					//case 8:
+					//	_heuristicCost = GOAPHeuristic.BitmaskDifferenceUInt64;
+					//	break;
+					default:
+						throw new NotImplementedException($"Heuristic for EWorldState size of {sizeof(EWorldState)} bytes is not implemented");
+				}
+			}
+			else if (_heuristicCost == null)
+			{
+				// Prepare custom heuristic cost for first time
+				var goapData = frame.Unsafe.GetOrAddSingletonPointer<GOAPData>();
+				goapData->HeuristicCost = customHeuristicCost;
+
+				_heuristicCost = customHeuristicCost.GetHeuristicCost;
+			}
+			else
+			{
+				// Check whether custom heuristic cost is the same as existing one
+				frame.Unsafe.TryGetPointerSingleton(out GOAPData* goapData);
+				
+				if (goapData == null || goapData->HeuristicCost != customHeuristicCost)
+				{
+					throw new InvalidOperationException("Heuristic cost calculation has to be same for all GOAP agents. Setting custom heuristic cost must be called before GOAPManager.Initilize method.");
+				}	 
+			}
 		}
 
 		private static GOAPAction GetCurrentAction(Frame frame, GOAPAgent* agent)
