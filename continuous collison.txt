@@ -1,0 +1,60 @@
+Overview
+Continous Collision Detection is used to fast moving physics entities collide with other physics colliders instead of tunnelling through them.
+
+There are two common approaches for CCD algorithms, speculative and sweep based. Quantum implements a speculative Continuous Collision Detection due to the performance considerations tied to its stateless physics engine. The speculative CCD approach is better suited for parallelism while also handling angular motion well; the former is needed for performance and the latter is necessary in many gameplay scenarios.
+
+The speculative CCD algorithm increases the minimum bounding box used during the broad-phase for an entity based on its PhyiscsBody component linear Velocity and AngularVelocity. It is called speculative because it "speculates" the entity may collide with any of the other physics objects in that area and feeds all these candidates into the solver. This speculation ensures all contact contrains are taken into account when solving the collision thus preventing tunnelling.
+
+Back To Top
+ 
+
+Set-up
+Two simple steps are required to set up the CCD; both of which can done at edit-time and / or runtime.
+
+N.B.: Given the performance impact CCD has on the simulation, the CCD functionality is enabled on a per-entity basis and NOT globally!
+
+Back To Top
+ 
+
+Edit-Time
+Step 1: Check the Allow CCD boolean in the Physics section of the Simulation Config asset.
+
+Allow CCD in the Simulation Config
+Enable the CCD in the Simulation Config.
+Step 2: Enable the Use Continuous Collision Detected flag in the Config found on the PhysicsBody component of the Entity Prototype$.
+
+CCD Flag in the PhysicsBody Config
+Select the CCD Flag in the PhysicsBody Config.
+Back To Top
+ 
+
+Runtime
+Should the CCD only be necessary in particular situation or moments of the game, it is possible to dynamically toggle the CCD and entities using it on and off.
+
+Step 1: Toggle the AllowCCD property in the current game state's PhysicsSceneSettings. The PhysicsSceneSettings are part of the frame and initialized with the Physics values found in the SimulationConfig asset. IMPORTANT: Do NOT modify the SimulationConfig asset at runtime, this is undeterministic and will result in desynchronization!
+
+frame.PhysicsSceneSettings->CCDSettings.AllowCCD = true;
+Step 2: Toggle the UseContinuousCollisionDetection property on the PhysicsBody component for the entity which should be using CCD.
+
+var physicsBody = f.Get<PhysicsBody3D>(myEntityRef);
+physicsBody.UseContinuousCollisionDetection = true;
+Back To Top
+ 
+
+Config
+The SimulationConfig assets hold the default values for initializing the physics engine; including the aspects related to the CCD. The default values found in the Continuous Collision Detection (CCD) section are optimal for most games and should only be tweaked with care if edge cases were to arise.
+
+AllowCCD: Allows CCD to be performed if the Physics Body has CCD enabled on its Config flags.
+CCDLinearVelocityThreshold: If CCD is allowed, it will be performed on all Physics Bodies that have it enabled and have a linear velocity magnitude above this threshold.
+CCDAngularVelocityThreshold: If CCD is allowed, it will be performed on all Physics Bodies that have it enabled and have a angular velocity magnitude above this threshold.
+CCDDistanceTolerance: The absolute distance value below which the Physics Bodies under CCD check can be considered as touching.
+MaxTimeOfImpactIterations: The maximum number of iterations performed by the CCD algorithm when computing the time of impact between two Physics Bodies.
+MaxRootFindingIterations: The maximum number of iterations performed when computing the point in time when the distance between two Physics Bodies in a given separation axis is below the tolerance.
+Back To Top
+ 
+
+Known Limitations
+Although the speculative CCD is feature complete, one needs to be aware of the know limitations of the speculative approach.
+
+The current algorithm runs a single CCD iteration alongside the regular physics collision resolution. In other words, after a CCD collision is detected and resolved, the remaining delta-time for that entity is integrated regardless of CCD. Thus there is a chance of tunnelling occurring in highly dense environments with extremely fast moving entities.
+

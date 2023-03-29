@@ -1,0 +1,308 @@
+Commands
+Introduction
+Command System Setup In The Simulation
+DeterministicCommandSetup
+CommandSetup (Only For 2.0!)
+Sending Commands From The View
+Sending CompoundCommands From The View
+Overloads
+Polling Commands From The Simulation
+Note
+Examples For Collections
+List
+Array
+Compound Command Example
+
+Introduction
+Quantum Commands are an input data paths to Quantum standard APIs. They are similar to Quantum Inputs but are not required to be sent every tick.
+
+Quantum Commands are fully reliable. The server will always accept them and confirm it, regardless of the time at which they are sent. This comes with a trade-off; namely local clients, including the one who sent the command, cannot predict the tick in which the command is received by the simulation. While visual prediction can be shown if needed, the simulation will only receive the Command after the server has confirmed it as part of a tick.
+
+Commands are implemented as regular C# classes that inherit from Photon.Deterministic.DeterministicCommand. They can contain any serializable data.
+
+using Photon.Deterministic;
+namespace Quantum
+{
+    public class CommandSpawnEnemy : DeterministicCommand
+    {
+        public long enemyPrototypeGUID;
+
+        public override void Serialize(BitStream stream)
+        {
+            stream.Serialize(ref enemyPrototypeGUID);
+        }
+
+        public void Execute(Frame f)
+        {
+            var enemyPrototype = f.FindAsset<EntityPrototype>(enemyPrototypeGUID);
+            enemyPrototype.Container.CreateEntity(f);
+        }
+    }
+}
+Back To Top
+ 
+
+Command System Setup In The Simulation
+In order for commands to be sent by Quantum, a system needs to be created for them and be made aware of the available commands.
+
+In Quantum 2.1 and onwards, Commands need to be registered in CommandSetup.User.cs.
+In Quantum 2.0, Commands need to be registered in CommandSetup.cs.
+Back To Top
+ 
+
+DeterministicCommandSetup
+Commands need to be added to the command factories found in CommandSetup.User.cs to be available at runtime.
+
+N.B.: CommandSetup.Legacy.cs is not directly used in this setup; however, it needs to be kept in 2.1 for compatibility reasons.
+
+// CommandSetup.User.cs
+
+namespace Quantum {
+  public static partial class DeterministicCommandSetup {
+    static partial void AddCommandFactoriesUser(ICollection<IDeterministicCommandFactory> factories, RuntimeConfig gameConfig, SimulationConfig simulationConfig) {
+      // user commands go here
+      // new instances will be created when a FooCommand is received (de-serialized)
+      factories.Add(new FooCommand());
+
+      // BazCommand instances will be acquired from/disposed back to a pool automatically
+      factories.Add(new DeterministicCommandPool<BazCommand>());
+    }
+  }
+}
+
+----------
+
+// CommandSetup.Legacy.cs
+
+using Photon.Deterministic;
+namespace Quantum {
+  public static class CommandSetup {
+    public static DeterministicCommand[] CreateCommands(RuntimeConfig gameConfig, SimulationConfig simulationConfig) {
+      return new null;
+    }
+  }
+}
+Back To Top
+ 
+
+CommandSetup (Only For 2.0!)
+In Quantum 2.0 Commands need to be registered in CommandSetup.cs to be available at runtime.
+
+N.B.: This system is obsolete in newer versions of Quantum; refer to DeterministicCommandSetup for more information.
+
+using Photon.Deterministic;
+namespace Quantum {
+  public static class CommandSetup {
+    public static DeterministicCommand[] CreateCommands(RuntimeConfig gameConfig, SimulationConfig simulationConfig) {
+      return new DeterministicCommand[] {
+
+        // user commands go here
+        new CommandSpawnEnemy(),
+      };
+    }
+  }
+}
+Back To Top
+ 
+
+Sending Commands From The View
+Commands can be send from anywhere inside Unity.
+
+using Quantum;
+using UnityEngine;
+
+public class UISpawnEnemy : MonoBehaviour
+{
+    [SerializeField] private EntityPrototypeAsset enemyPrototype = null;
+    private PlayerRef _playerRef;
+
+    public void Initialize(PlayerRef playerRef) {
+        _playerRef = playerRef;
+    }
+
+    public void SpawnEnemy() {
+        CommandSpawnEnemy command = new CommandSpawnEnemy()
+        {
+            enemyPrototypeGUID = enemyPrototype.Settings.Guid.Value,
+        };
+        QuantumRunner.Default.Game.SendCommand(command);
+    }
+}
+Back To Top
+ 
+
+Sending CompoundCommands From The View
+N.B.: This is only available from Quantum 2.1 onwards.
+
+To send multiple commands at once, simply create a CompoundCommand and add each individual DeterministicCommand to it before sending it.
+
+var compound = new Quantum.Core.CompoundCommand();
+compound.Commands.Add(new FooCommand());
+compound.Commands.Add(new BazCommand());
+
+QuantumRunner.Default.Game.SendCommand(compound);
+Back To Top
+ 
+
+Overloads
+SendCommand() has two overloads.
+
+void SendCommand(DeterministicCommand command);
+void SendCommand(Int32 player, DeterministicCommand command);
+Specify the player index (PlayerRef) if multiple players are controlled from the same machine. Games with only one local player can ignore the player index field.
+
+Back To Top
+ 
+
+Polling Commands From The Simulation
+To receive and handle Commands inside the simulation poll the frame for a specific player:
+
+using Photon.Deterministic;
+namespace Quantum
+{
+    public class PlayerCommandsSystem : SystemMainThread
+    {
+        public override void Update(Frame f)
+        {
+            for (int i = 0; i < f.PlayerCount; i++)
+            {
+                 var command = f.GetPlayerCommand(i) as CommandSpawnEnemy;
+                 command?.Execute(f);
+            }
+        }
+    }
+}
+Like any other sytem, the system handling the command polling and consumption needs to be included in SystemSetup.cs
+
+namespace Quantum {
+  public static class SystemSetup {
+    public static SystemBase[] CreateSystems(RuntimeConfig gameConfig, SimulationConfig simulationConfig) {
+      return new SystemBase[] {
+        // pre-defined core systems
+        [...]
+
+        // user systems go here
+        new PlayerCommandsSystem(),
+
+      };
+    }
+  }
+}
+Back To Top
+ 
+
+Note
+The API does neither enforce, nor implement, a specific callback mechanism or design pattern for Commands. It is up to the developer to chose how to consume, interpret and execute Commands; for example by encoding them into signals, using a Chain of Responsibility, or implementing the command execution as a method in them.
+
+Back To Top
+ 
+
+Examples For Collections
+
+List
+using System.Collections.Generic;
+using Photon.Deterministic;
+
+namespace Quantum
+{
+    public class ExampleCommand : DeterministicCommand
+    {
+        public List<EntityRef> Entities = new List<EntityRef>();
+
+        public override void Serialize(BitStream stream)
+        {
+            var count = Entities.Count;
+            stream.Serialize(ref count);
+            if (stream.Writing)
+            {
+                foreach (var e in Entities)
+                {
+                    var copy = e;
+                    stream.Serialize(ref copy.Index);
+                    stream.Serialize(ref copy.Version);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    EntityRef readEntity = default;
+                    stream.Serialize(ref readEntity.Index);
+                    stream.Serialize(ref readEntity.Version);
+                    Entities.Add(readEntity);
+                }
+            }
+        }
+    }
+}
+Back To Top
+ 
+
+Array
+using Photon.Deterministic;
+
+namespace Quantum
+{
+    public class ExampleCommand : DeterministicCommand
+    {
+        public EntityRef[] Entities;
+
+        public override void Serialize(BitStream stream)
+        {
+            stream.SerializeArrayLength(ref Entities);
+            for (int i = 0; i < Cars.Length; i++)
+            {
+                EntityRef e = Entities[i];
+                stream.Serialize(ref e.Index);
+                stream.Serialize(ref e.Version);
+                Entities[i] = e;
+            }
+        }
+    }
+}
+Back To Top
+ 
+
+Compound Command Example
+Only one command can be attached to an input stream per tick. Even though a client can send multiple Deterministic Commands per tick, the commands will not reach the simulation at the same tick, rather they will arrive separately on consecutive ticks. To go around this limitation, you can pack multiple Deterministic Commands into a single CompoundCommand.
+
+Quantum 2.1 already offers this class. And for previous versions it can be added like this:
+
+public class CompoundCommand : DeterministicCommand {
+  public static DeterministicCommandSerializer CommandSerializer;
+  public List<DeterministicCommand> Commands = new List<DeterministicCommand>();
+
+  public override void Serialize(BitStream stream) {
+    if (CommandSerializer == null) {
+      CommandSerializer = new DeterministicCommandSerializer();
+      CommandSerializer.RegisterPrototypes(CommandSetup.CreateCommands(null, null));
+    }
+
+    var count = Commands.Count;
+    stream.Serialize(ref count);
+
+    if (stream.Reading) {
+      Commands.Clear();
+    }
+
+    for (var i = 0; i < count; i++) {
+      if (stream.Reading) {
+        CommandSerializer.ReadNext(stream, out var cmd);
+        Commands.Add(cmd);
+      } else {
+        CommandSerializer.PackNext(stream, Commands[i]);
+      }
+    }
+  }
+}
+To then dispatch the compounded commands:
+
+public override void Update(Frame f) {
+  for (var i = 0; i < f.PlayerCount; i++) {
+      var compoundCommand = f.GetPlayerCommand(i) as CompoundCommand;
+      if (compoundCommand != null) {
+        foreach (var cmd in compoundCommand.Commands) {
+        }
+      }
+  }
+}

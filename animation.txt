@@ -1,0 +1,167 @@
+Animation
+Overview
+Polling Based Animation
+Trigger Events
+Tips
+Deterministic Animation
+Tips
+
+Overview
+In Quantum there are two distinct ways to handle animation:
+
+poll the game state from Unity; and,
+deterministic animation using the Custom Animator.
+Back To Top
+ 
+
+Polling Based Animation
+Most games use animation to communicate the state of an object to the player. For instance, when the playable character is walking or jumping, the animations are actually In Place animations and the perceived movement is driven by code.
+
+In other words, the scripts managing the characters' respective (Unity) animator are stateless and simply derive values to pass on as animation parameters based on data polled from the game simulation (in Quantum).
+
+N.B.: If the gameplay systems rely on Root Motion or have to be aware of the animation state, then skip to the next section.
+
+The polling based animation concept has been implemented in the API Sample. The following snippet is extracted from the PlayerAnimations script and drives the movement animation.
+
+When the entity is instantiated, its Initialize() method is called which caches the entity's EntityRef and the current QuantumGame; the latter one is purely for convenience.
+Every Unity Update(), the MovementAnimation() function is called.
+The MovementAnimation() function polls data from the CharacterController3D using the previously cached EntityRef.
+The relevant animator parameters are derived from the polled data.
+The computed data is passed on to the Unity Animator.
+// This snippet is extracted from the Quantum API Sample.
+
+public unsafe class PlayerAnimation : MonoBehaviour
+{
+    [SerializeField] private Animator _animator = null;
+
+    private EntityRef _entityRef = default;
+    private QuantumGame _game = null;
+
+    // Animator Parameters
+    private const string FLOAT_MOVEMENT_SPEED = "floatMovementSpeed";
+    private const string FLOAT_MOVEMENT_VERTICAL = "floatVerticalMovement";
+    private const string BOOL_IS_MOVING = "boolIsMoving";
+
+    // This method is called from the PlayerSetup.cs Initialize() method which is registered
+    // to the EntityView's OnEntityInstantiated event located on the parent GameObject
+    public void Initialize(PlayerRef playerRef, EntityRef entityRef){
+        _playerRef = playerRef;
+        _entityRef = entityRef;
+        _game = QuantumRunner.Default.Game;
+    }
+
+    // Update is called once per frame
+    void Update(){
+        MovementAnimation();
+    }
+
+    private void MovementAnimation() {
+        var kcc = _game.Frames.Verified.Unsafe.GetPointer<CharacterController3D>(_entityRef);
+        bool isMoving = kcc->Velocity.Magnitude.AsFloat > 0.2f;
+
+        _animator.SetBool(BOOL_IS_MOVING, isMoving);
+
+        if (isMoving) {
+            _animator.SetFloat(FLOAT_MOVEMENT_SPEED, kcc->Velocity.Magnitude.AsFloat);
+            _animator.SetFloat(FLOAT_MOVEMENT_VERTICAL, kcc->Velocity.Z.AsFloat);
+        }
+        else {
+            _animator.SetFloat(FLOAT_MOVEMENT_SPEED, 0.0f);
+            _animator.SetFloat(FLOAT_MOVEMENT_VERTICAL, 0.0f);
+        }
+    }
+Back To Top
+ 
+
+Trigger Events
+Some animations are based on a particular events taking place in the game; e.g. a player pressing jump or getting hit by an enemy. In these cases, it is usually preferable to raise an event from the simulation and have the view listen to it. This ensures decoupling and work well in conjunction with the polling based animation approach.
+
+For a comprehensive explanation on events and callbacks, refer to the Quantum ECS > Game Callbacks page in the Manual.
+
+The API Sample uses events to communicate when punctual actions happen that should result in a visual reaction; e.g. the playable character jumping.
+
+The MovementSystem in Quantum reads the player input and computes the movement values before passing them on to the CharacterController3D. The system also listens to the Jump key press. If the key WasPressed, it raises a PlayerJump event and calls the CharacterController3D's Jump() method.
+
+using Photon.Deterministic;
+namespace Quantum
+{
+    public unsafe struct PlayerMovementFilter
+    {
+        public EntityRef EntityRef;
+        public PlayerID* PlayerID;
+        public Transform3D* Transform;
+        public CharacterController3D* Kcc;
+    }
+
+    unsafe class MovementSystem : SystemMainThreadFilter<PlayerMovementFilter>
+    {
+        public override void Update(Frame f, ref PlayerMovementFilter filter)
+        {
+            var input = f.GetPlayerInput(filter.PlayerID->PlayerRef);
+
+            // Other Logic
+
+            if (input->Jump.WasPressed)
+            {
+                f.Events.PlayerJump(filter.PlayerID->PlayerRef);
+                filter.Kcc->Jump(f);
+            }
+
+            // Other Logic
+        }
+    }
+}
+On the Unity side, the PlayerAnimation script listens to the PlayerJump event and reacts to it. These steps are necessary to achieve this:
+
+Define a method that can receive the event - void Jump(EventPlayerJump e).
+Subscribe to the event in question.
+When the event is received, check it is meant for the GameObject the script is located on by comparing the PlayerRef contained in the event against the one cached earlier.
+Trigger / Set the parameter/s in the Unity Animator.
+// This snippet is extracted from the Quantum API Sample.
+
+public unsafe class PlayerAnimation : MonoBehaviour
+{
+    [SerializeField] private Animator _animator = null;
+
+    private PlayerRef _playerRef = default;
+    private QuantumGame _game = null;
+
+    // Animator Parameters
+    private const string TRIGGER_JUMP = "triggerJump";
+
+    public void Initialize(PlayerRef playerRef, EntityRef entityRef)
+    {
+        _playerRef = playerRef;
+
+        // Other Logic
+
+        QuantumEvent.Subscribe<EventPlayerJump>(this, Jump);
+    }
+
+    private void Jump(EventPlayerJump e)
+    {
+        if (e.PlayerRef != _playerRef) return;
+        _animator.SetTrigger(TRIGGER_JUMP);
+    }
+Back To Top
+ 
+
+Tips
+Place the model and its animator component on a child object.
+Events are not part of the game state and thus are not available to late/re-joining players. It is therefore advisable to first initialize the animation state by polling the latest game state if the game has already started.
+Use synchronised events for animations that need to be triggered with 100% accuracy, e.g. a victory celebration.
+Use regular non-synchronised events for animations that need to be snappy, e.g. getting hit.
+Use the EventCanceled callback to graciously exit from animations triggered by a cancelled non-synchronised events. This can happen when the event was raised as part of a prediction but was rolled back during a verified frame.
+Back To Top
+ 
+
+Deterministic Animation
+The main advantage of using a deterministic animation system is tick precise animations which are 100% synchronised across all clients and will snap to the correct state in case of a rollback. While this may sounds ideal, it comes with a performance impact since animations and their state are now part of the simulated game state. In reality only few games require and benefit from a deterministic animation system; among those are Fighting games and some Sports games,.
+
+The Custom Animator is a tool enabling deterministic animation. It works by baking information from Unity’s Mecanim Controller and importing every configuration such as the states, the transitions between the states, the motion clips and so on.
+
+Development of the Custom Animator has been halted due to the dependencies it created with Unity's Mecanim. However, the code has been open sourced and is available for download on the Addons > Custom Animator page. This page also provides an overview and a quick-guide on how to import and use the Custom Animator.
+
+Keep in mind its features are limited and it will likely have to be adapted to your needs.
+
+

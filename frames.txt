@@ -1,0 +1,48 @@
+Quantum's predict-rollback architecture allows to mitigate latency. Quantum always rolls-back and re-simulates frames. It is a necessary for determinism and involves the validation of player input by the server. Once the server has either confirmed the player input or overwritten/replaced it (only in cases were the input did not reach the server in time), the validated input of all players for a given frame is sent to the clients. Once the validated input is received, the last verified frame advances using the confirmed input.
+
+N.B.: A player's own input will be rolled back if it has not reached the server in time or could not be validated.
+
+Back To Top
+ 
+
+Types Of Frame
+Quantum differenciates between two types of frame:
+
+verified; and,
+predicted.
+Back To Top
+ 
+
+Verified
+A Verified frame is a trusted simulation frame. A verified frame is guaranteed to be deterministic and identical on all client simulations. The verified simulation only simulates the next verified frame once it has received the server-confirmed inputs; as such, it moves forward proportional to RTT/2 from the server.
+
+A frame is verified if both of the following condition are both true:
+
+the input from ALL players is confirmed by the server for this tick; and,
+all previous ticks it follows are verified.
+A partial tick confirmation where the input from only a subset of player has been validated by the server will not result in a verified tick/frame.
+
+Back To Top
+ 
+
+Predicted
+Contrary to verified frames, predicted frames do not require server-confirmed input. This means the predicted frame advances with prediction as soon as the simulation has accumulated enough delta time in the local session.
+
+The Unity-side API offers access to various versions of the predicted frame, see the API explanation below.
+
+Predicted : the simulation "head", based on the synchronised clock.
+PredictedPrevious (predicted - 1): used for main clock-aliasing interpolation (most views will use this to stay smooth, as Unity's local clock may slightly drift from the main server clock. Quantum runs from a separate clock, in sync with the server clock - smoothly corrected).
+PreviousUpdatePredicted: this is the exact frame that was the "Predicted/Head" the last time Session.Update was called (with the "corrected" data in it). Used for error correction interpolation (most of the time there will be no error).
+Back To Top
+ 
+
+API
+The concept of Verified and Predicted frames exists in both the simulation and the view, albeit with a slightly different API.
+
+
+Simulation
+In the simulation, one can access the state of the currently simulated frame via the Frame class.
+
+Method	Return Value	Description
+IsVerified	bool	Returns true if the frame is deterministic across all clients and uses server-confirmed input.
+IsPredicted	bool	Returns true if the frame is a locally predicted one.

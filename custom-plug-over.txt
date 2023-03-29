@@ -1,0 +1,40 @@
+Overview
+You can get Quantum Custom Server Plugin SDK from our quantum sdk page.
+
+It contains Quantum server libraries, the Photon-Server and a sample project to enable you to run your own Photon-Server Quantum plugin.
+
+Common features:
+
+Run your game simulation on the server
+Send server snapshots to late-joining or reconnecting clients
+Forward the input or replays to another backend
+Safely retrieve player configurations/load-outs/inventories from another backend
+Forward game results to another backend
+Add additional user authentication
+Start by watching the intro video below.
+
+The set up tutorial demonstrates how the sample project runs on a local Photon-Server.
+
+Use the API docs to gather more information about the features you want to implement.
+
+Back To Top
+ 
+
+Quantum Custom Server Plugin Intro Video (YouTube)
+
+Back To Top
+ 
+
+API
+The PhotonDeterministic.Plugin and PhotonDeterministic.Server classes have been added to the Quantum offline API documentation that can be found in the Quantum SDK folder (unblock the zip before extracting please):
+
+PhotonQuantum-Documentation.chm
+Additional the API information is available as Visual Studio xml documentation alongside the dlls in the Custom Plugin SDK folder:
+
+assemblies\PhotonDeterministic.Plugin.xml
+assemblies\PhotonDeterministic.Server.xml
+The comments are visible when hovering over classes and methods:
+
+
+And when opening the classes in your IDE:
+

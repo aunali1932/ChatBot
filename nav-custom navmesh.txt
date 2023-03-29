@@ -1,0 +1,235 @@
+Generating BakeData
+The recommended process is to generate the intermediate navmesh format MapNavMesh.BakeData and run this through MapNavMeshBaker.BakeNavMesh(MapData data, MapNavMesh.BakeData navmeshBakeData) which uses the triangle information from the BakeData to fill out all required data structures of a Quantum navmesh.
+
+MapNavMeshBaker.BakeNavMesh() was developed to be used during edit time and replacing it entirely could yield performance improvements, but also would be a much more elaborate task.
+
+Back To Top
+ 
+
+MapNavMesh.BakeData Class
+Type	Field	Description
+String	Name	The name of the navmesh accessible inside the simulation by f.Map.NavMeshes[name]
+Vector3	Position	The position of the navmesh. Final navmesh vertices are stored in global space and their positions are translated by this during baking.
+FP	AgentRadius	The radius of the largest agents that the navmesh is created for. Older versions of Quantum were permitting different agent radii, but that has been abolished. Now, agents can walk up until their pivot is on the edge of the navmesh. This way the margin agents should keep away from walls is baked into the triangles. This value is only used to render debug graphics.
+List<string>	Regions	All regions ids that are used in this navmesh. During baking the region ids will be added to the Region list of the Map asset and their index is baked into the navmesh triangles region mask (NavMeshTriangle.Regions). The regions are aggregated on the map because a map can have multiple navmeshes that share the region ids.
+MapNavMeshVertex[]	Vertices	The vertices of the navmesh.
+MapNavMeshTriangle[]	Triangles	The triangle of the navmesh. This is a regular mesh data structure where the triangles and vertices are kept in two separate arrays and the triangle points into the vertex array to mark their 3 vertices.
+MapNavMeshLink[]	Links	Link between positions on the same navmesh.
+enum	ClosestTriangleCalculation	The Quantum navmesh uses a grid for spatial partitioning. Each grid cell will have a fallback triangle assigned. The default search is quite slow (BruteForce) while SpiralOut more efficient is but it could result in empty fallback triangles.
+int	ClosestTriangleCalculationDepth	The number of grid cells to expand the SpiralOut search.
+bool	EnableQuantum_XY	When enabled the navmesh baking will flip Y and Z components of the vertex positions to support navmeshes generated in the XY plane.
+bool	LinkErrorCorrection	Automatically correct navmesh link positions to the closest triangle during baking.
+Back To Top
+ 
+
+MapNavMeshTriangle Class
+Triangles are expected to have clock-wise winding order. Not all fields have to be filled out. Some of them are only needed for the legacy navmesh drawing tool.
+
+Type	Field	Description
+String	Id	Not required
+String[]	VertexIds	Must have length of 3. The referenced vertices as ids. Required for SDK 2.1. or earlier.
+Int32[]	VertexIds2	Must have length of 3. The referenced vertices as indices into the vertex array. Required for SDK 2.2.
+Int32	Area	Not required
+String	RegionId	The region that this triangle belongs to. Default is null.
+FP	Cost	he cost of the triangle. Default should be FP._1.
+Back To Top
+ 
+
+MapNavMeshVertex Class
+The types of Position has been replaced by FPVector3 SDK 2.2.
+
+Type	Field	Description
+String	Id	Required for SDK 2.1 or earlier
+Vector3	Position	The position of the vertex
+List<Int32>	Neighbors	Not required
+List<Int32>	Triangles	Not required
+Back To Top
+ 
+
+MapNavMeshLink Class
+The types of Start, End and CostOveride have been replaced by FPVector3 and FP respectively in SDK 2.2.
+
+Type	Field	Description
+Vector3	Start	Start position of the link. Must be on the same navmesh.
+Vector3	End	End position of the link. Must be on the same navmesh.
+bool	Bidirectional	Can the link be traversed from both directions.
+float	CostOverride	The cost of the connection.
+String	RegionId	The region id that the link belongs to. Default is null.
+String	Name	The name of the link. Can be queried by navmesh.Links[NavMeshPathfinder.CurrentLink()].Name.
+Back To Top
+ 
+
+Snippet
+// Generate simple navmesh BakeData
+var bakeData = new MapNavMesh.BakeData() {
+  AgentRadius = FP._0_20,
+  ClosestTriangleCalculation = MapNavMesh.FindClosestTriangleCalculation.SpiralOut,
+  ClosestTriangleCalculationDepth = 1,
+  Name = "DynamicNavmesh",
+  PositionFP = FPVector3.Zero,
+  Regions = new System.Collections.Generic.List<string>(),
+  Vertices = new MapNavMeshVertexFP[] {
+    new MapNavMeshVertexFP { Position = FPVector3.Forward },
+    new MapNavMeshVertexFP { Position = FPVector3.Right },
+    new MapNavMeshVertexFP { Position = -FPVector3.Forward},
+    new MapNavMeshVertexFP { Position = -FPVector3.Right},
+  },
+  Triangles = new MapNavMeshTriangle[] {
+    new MapNavMeshTriangle { VertexIds2 = new int[] { 0, 1, 2}, Cost = FP._1 },
+    new MapNavMeshTriangle { VertexIds2 = new int[] { 0, 2, 3}, Cost = FP._1 }
+  }
+};
+Back To Top
+ 
+
+Replacing Navmesh Assets Before Starting The Simulation
+Replacing the content of an existing Unity Quantum navmesh asset before starting the simulation. All clients and late-joiners have to perform this.
+
+Requires:
+
+navmesh-deterministic-baking branch for SDK 2.1 (please contact us)
+The BakeData generation is deterministic
+Replacing the asset must be done before the navmesh is loaded through the UnityDB and before the simulation has started. In this snippet the Unity navmesh asset is loaded to replace the Quantum asset inside it (.Settings) and the Guid and Path values are copied. Invalidating the .DataAsset will prevent the deserialization of the binary navmesh asset (_data asset) when it is finally loaded by Quantum.
+
+var navmesh = MapNavMeshBaker.BakeNavMesh(mapdata.Asset.Settings, bakeData, null);
+var navmeshAsset = UnityEngine.Resources.Load<NavMeshAsset>("PathToNavmeshAsset");
+navmesh.Guid = navmeshAsset.Settings.Guid;
+navmesh.Path = navmeshAsset.Settings.Path;
+navmeshAsset.Settings = navmesh;
+navmeshAsset.Settings.DataAsset.Id = AssetGuid.Invalid;
+
+// QuantumRunner.StartGame()
+Back To Top
+ 
+
+Injecting Navmeshes During Runtime
+
+Restrictions By The Map Asset
+The Map asset carries two look up for convenient navmesh and Region name lookups that are populated when the map and associated navmeshes is loaded. Both lookups will not work with dynamic navmesh assets.
+
+public Dictionary<String, NavMesh> NavMeshes;
+public Dictionary<String, Int32> RegionMap;
+public NavMesh GetNavMesh(String name) {}
+Back To Top
+ 
+
+GetNavMesh() Alternative
+The navmesh lookup in Map (f.Map.GetNavMesh(name)) cannot be used for dynamic navmeshes because modifying the dictionary on Map does not work for late-joiner or reconnecting players. Instead use this snippet to search for all navmeshes:
+
+public static NavMesh FindNavmeshByName(Frame f, string name) {
+  var result = f.Map.GetNavMesh(name);
+  if (result != null) {
+    return result;
+  }
+
+  foreach (var a in f.DynamicAssetDB.Assets) {
+    if (a is NavMesh navmeshAsset) {
+      if (navmeshAsset.Name == name) {
+        return navmeshAsset;
+      }
+    }
+  }
+
+  return null;
+}
+Alternatively create and manage a navmesh lookup saved on f.Globals:
+
+global {
+  dictionary<QStringUtf8<32>, asset_ref<NavMesh>> Navmeshes;
+}
+Back To Top
+ 
+
+Using Regions On Dynamic Navmeshes
+If a dynamic navmesh has regions itself it has to reuse all regions loaded by the static map and other dynamic regions. If it has new regions they are not allowed to use the same regions ids already used. Toggling would not work properly.
+
+Best to create one static RegionMap offline and use it inside dynamic generated navmeshes. The RegionMap is created during Map.Loaded() from the maps Region member.
+
+public string[] Regions;
+Back To Top
+ 
+
+Injecting Navmeshes Inside The Simulation
+Deterministically create NavmeshBakeData and bake a Quantum navmesh inside the simulation during runtime. Uses Quantum dynamic database.
+
+Requires:
+
+navmesh-deterministic-baking branch for SDK 2.1 (please contact us)
+NavmeshBakeData creation needs to be deterministic
+Must be performed during a verified frame
+The navmesh baking code has been moved (copied in 2.1) to the quantum.code project to be able to run outside Unity.
+
+using Quantum.Experimental;
+
+// May be more buffer required for serialization
+private static byte[] _byteStreamData = new byte[1024 * 1024];
+
+// Generate bake data
+var bakeData = new NavmeshBakeData() {
+  AgentRadius = FP._0_20,
+  ClosestTriangleCalculation = NavMeshBakeDataFindClosestTriangle.SpiralOut,
+  ClosestTriangleCalculationDepth = 1,
+  Name = "DynamicNavmesh",
+  PositionFP = FPVector3.Zero,
+  Regions = new List<string>(),
+  Vertices = new Experimental.NavmeshBakeDataVertex[] {
+    new NavmeshBakeDataVertex { Position = FPVector3.Forward },
+    new NavmeshBakeDataVertex  { Position = FPVector3.Right },
+    new NavmeshBakeDataVertex  { Position = -FPVector3.Forward},
+    new NavmeshBakeDataVertex  { Position = -FPVector3.Right},
+  },
+  Triangles = new NavmeshBakeDataTriangle[] {
+    new NavmeshBakeDataTriangle { VertexIds = new int[] { 0, 1, 2}, Cost = FP._1 },
+    new NavmeshBakeDataTriangle { VertexIds = new int[] { 0, 2, 3}, Cost = FP._1 }
+  }
+};
+
+// Bake navmesh asset
+var navmesh = NavmeshBaker.BakeNavMesh(f.Map, bakeData);
+
+// Create and add binary navmesh data asset (to support late joiners)
+var byteStream = new ByteStream(_byteStreamData);
+navmesh.Serialize(byteStream, true);
+var binaryDataAsset = new BinaryData();
+binaryDataAsset.Data = byteStream.ToArray();
+var binaryDataAssetRef = new AssetRefBinaryData();
+binaryDataAssetRef.Id = f.AddAsset(binaryDataAsset);
+navmesh.DataAsset = binaryDataAssetRef;
+
+// Add navmesh to Dynamic DB
+f.AddAsset(navmesh);
+Also use the FindNavmeshByName() snippet from the next section to correctly find dynamic navmesh assets by name.
+
+Back To Top
+ 
+
+Injecting Navmeshes From Unity
+Works for late-joiners. Must be initiated by one client.
+
+Requires:
+
+Latest dynamic asset injection addon
+Create BakeData in Unity on one client and use the AssetInjection command:
+
+var map = QuantumRunner.Default.Game.Frames.Verified.Map;
+// Bake navmesh
+var navmesh = MapNavMeshBaker.BakeNavMesh(map, bakeData, null);
+var data = AssetInjectionUtility.SerializeAsset(null, navmesh);
+// Adjust PlayerRef 0
+AssetInjectionUtility.InjectAsset(QuantumRunner.Default.Game, 0, bakeData.Name, data);
+To render the gizmos of the dynamic navmesh change the following line in QuantumGameGizmos.cs:
+
+// ################## NavMeshes ##################
+
+if (editorSettings.DrawNavMesh) {
+  var listOfNavmeshes = new System.Collections.Generic.List<NavMesh>();
+  if (editorSettings.DrawNavMesh) {
+     listOfNavmeshes.AddRange(frame.Map.NavMeshes.Values);
+  }
+  if (frame.DynamicAssetDB.IsEmpty == false) {
+     listOfNavmeshes.AddRange(frame.DynamicAssetDB.Assets.Where(a => a is NavMesh).Select(a => (NavMesh)a).ToList());
+  }
+  foreach (var navmesh in listOfNavmeshes) {
+    // ...
+  }
+}

@@ -1,0 +1,41 @@
+Frame Classes
+The FrameBase class the hub for all of the Quantum game data. More...
+
+Classes
+class  	Quantum.Frame
+ 	The user implementation of FrameBase that resides in the project quantum_state and has access to all user relevant classes. More...
+ 
+class  	Quantum.Core.FrameBase
+ 	The Frame class is the container for all the transient and static game state data, including the API for entities, physics, assets and others. More...
+ 
+struct  	Quantum.Core.FrameBase.FrameBaseUnsafe
+ 	Frame API to give access to C# unsafe pointers and advanced immediate operations. More...
+ 
+Variables
+Physics2D.PhysicsEngine2D.Api 	Quantum.Core.FrameBase.Physics2D
+ 	Access to the Physics2D API. More...
+ 
+Physics3D.PhysicsEngine3D.Api 	Quantum.Core.FrameBase.Physics3D
+ 	Access to the Physics3D API. More...
+ 
+Properties
+Navigation 	Quantum.Core.FrameBase.Navigation[get]
+ 	Access to the Navigation API. More...
+ 
+Detailed Description
+The FrameBase class the hub for all of the Quantum game data.
+
+Variable Documentation
+◆ Physics2D
+Physics2D.PhysicsEngine2D.Api Quantum.Core.FrameBase.Physics2D
+Access to the Physics2D API.
+
+◆ Physics3D
+Physics3D.PhysicsEngine3D.Api Quantum.Core.FrameBase.Physics3D
+Access to the Physics3D API.
+
+Properties
+◆ Navigation
+Navigation Quantum.Core.FrameBase.Navigation
+get
+Access to the Navigation API.

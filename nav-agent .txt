@@ -1,0 +1,178 @@
+Creating Navmesh Agents
+Since Quantum 2.0 navmesh agents are split into multiple components. We noticed that developers working with navmesh and steering want to control the final movement result, which makes a lot of sense, because it often is so vital to the game experience. The new navmesh agent parts should help developers to pick a combination of navmesh support without losing multi-threaded performance and without executing unneeded parts or wasting unneeded memory.
+
+Agent components are NavMeshPathfinder, NavMeshSteeringAgent and NavMeshAvoidanceAgent. A stand-alone component is NavMeshAvoidanceObstacle.
+
+Agent entities can be created in two ways: using Entity Prototypes in Unity or assembling the entity in code. They still use the NavMeshAgentConfig Quantum asset.
+
+Creating Agents With Entity Prototypes In Unity
+Creating Agents With Components In Code
+Important Agent Settings
+Pathfinder
+Steering Agent
+Update Interval
+Using Navmesh Agent Callbacks
+Common Navmesh Agent Setups
+
+Creating Agents With Entity Prototypes In Unity
+Create an empty Quantum prototype via the Unity menu: GameObject/Quantum/Empty Entity
+Select the entity and set Transform to 2D
+Toggle NavMeshPathfinder component
+Select the default NavMeshAgentConfig
+Toggle Initial Target and select a transform from the Unity scene to provide an initial position to move to
+Select the baked Quantum navmesh (see Navmesh workflow)
+Toggle on NavMeshSteeringAgent
+To see the path gizmos either:
+Activate Show Debug Steering on the default NavMeshAgentConfig or
+Activate the Navmesh Gizmo Draw Pathfinder Funnel in QuantumEditorSettings
+Press play
+Navmesh Agent Prototype
+Back To Top
+ 
+
+Creating Agents With Components In Code
+Alternatively agent entities can be assembled in code.
+
+Initially the entity requires a Transform2D or Transform3D component and adding a View component will make it have a prefab rendered in the scene.
+
+The most important component is the NavMeshPathfinder. It performs path-finding, stores the target position and a user-defined number of waypoints and detects the waypoint progression. This component needs to be created over the NavMeshPathfinder.Create() Factory method passing in a NavMeshAgentConfig.
+
+The NavMeshSteeringAgent component is optional and requires a NavMeshPathfinder. It has max speed, acceleration and rotation speed variables that can be changed during run-time and it steers the entity along the path. Apart from not using this component developers can change the MovementType to Callback and inject their own movement while having up-to-date avoidance data. Disable rotation speed and acceleration by setting them to 0.
+
+The NavMeshAvoidanceAgent requires both the NavMeshPathfinder and the NavMeshSteeringAgent components which need to be Set() on an entity prior to this component. This agent performs avoidance computations to avoid other moving agents (HRVO) by using priorities and filtering with masks and layers. Initially set by the NavMeshAgentConfig priority, mask and layer can be changed during run-time on the component.
+
+If you want the agent to be steered by a physics body, which could for example prevent the agent from penetrating static collision, the entity requires a PhysicsCollider2D/3D and a PhysicsBody2D. To enable this you need to set the MovementType to DynamicBody in its NavMeshAgentConfig.
+
+public override void OnInit(Frame f) {
+    base.OnInit(f);
+
+    var entity = f.Create();
+    f.Set(entity, new Transform3D() { Position = FPVector3.Zero, Rotation = FPQuaternion.Identity });
+    var config = f.FindAsset<NavMeshAgentConfig>(NavMeshAgentConfig.DEFAULT_ID);
+    var pathfinder = NavMeshPathfinder.Create(f, entity, config);
+
+    // find a random point to move to
+    var navmesh = f.Map.NavMeshes["Navmesh"];
+    if (navmesh.FindRandomPointOnNavmesh(FPVector2.Zero, FP._10, f.RNG, *f.NavMeshRegionMask, out FPVector2 randomPoint)) {
+    pathfinder.SetTarget(f, randomPoint, navmesh);
+    }
+
+    f.Set(entity, pathfinder);
+    f.Set(entity, new NavMeshSteeringAgent());
+}
+Activate the NavMesh Agent Gizmos Draw Nav Mesh Agents to enable the agent gizmo drawing in the scene windows.
+
+Back To Top
+ 
+
+Important Agent Settings
+
+Pathfinder
+NavMeshPathfinder.SetConfig() can be executed during the component creation and during run-time. If the agent is currently following a path and the waypoint count from the new config is different the path is reset. The config is automatically updated on the NavMeshSteeringAgent and NavMeshAvoidanceAgent components of the entity and values for Speed, Acceleration, AvoidancePriority, Layer and Mask are reset to the config values.
+
+NavMeshAgentConfig.MaxRepathTimeout is the time in seconds that will trigger a agent path-finding when a waypoint is not reached in this time. This is more of a fail-safe to mitigate stuck agents. Set the value to 0 to disable.
+
+NavMeshAgentConfig.LineOfSightFunneling should be activated when navmesh regions are used that are located inside the middle of the main navmesh. For example building that can be destroyed. The extra triangles introduced by the regions can sometimes result is slightly odd paths near active regions. This option will remove unnecessary waypoint near the regions.
+
+NavMeshAgentConfig.DynamicLineOfSight makes the agent check if waypoints can be skipped each tick. This option is costly but will remove any unnecessary waypoints on its path.
+
+If NavMeshAgentConfig.DynamicLineOfSightWaypointRange is set on the other hand the line of sight check is executed each tick only when close to a waypoint (range). This works without DynamicLineOfSight being enabled.
+
+NavMeshAgentConfig.FindValidTargetCellRange is helping when during SetTarget() a position outside the navmesh is chosen. The range parameter will search neighbouring cells for an optimal replacement of the target that is inside the navmesh.
+
+Consider the target marked with a yellow x in the following image. The cells searched for a specific cell range are marked with numbers. Cell range 0 for example will fail to find a destination. Range 1 on the other hand would find the closes position on the navmesh as depicted with the yellow dotted line. Be aware the increasing the cell range to unreasonable high numbers will have a big impact on the performance.
+
+Navmesh Agent Waypoint Reached Detection Axis
+Set the number of waypoints that are cached on the NavMeshPathfinder using NavMeshAgentConfig.CachedWaypointCount. Remember that storing more non-transient data will slow down the simulation. The first waypoint stored in the cache is the current position the agent has when SetTarget() was called and is used to enhance the waypoint reached detection. When the agent starts to steer towards the last waypoint it will automatically run path-finding again to mitigate situations where the agent does not have a valid waypoint when calculating a frame.
+
+Enable the waypoint reached detection help NavMeshAgentConfig.EnableWaypointDetection when you notice agents are having trouble reaching waypoints (for example due to slow rotation speed or avoidance). The subsequent parameter Axis Extend and Axis Offset are defining the waypoint reached detection axis (black line). If an agents enters the yellow zone, the waypoint is considered to be reached.
+
+Navmesh Agent Waypoint Reached Detection Axis
+Waypoint Reached Detection Axis
+If the pathfinder component has no accompanied steering component DefaultWaypointDetectionDistance is used to perform waypoint reached detection and should set to the agent max speed * delta time. See the "Useful Navmesh Agent Configurations" section how to enhance the waypoint reached detection.
+
+Back To Top
+ 
+
+Steering Agent
+NavMeshAgentConfig.StoppingDistance and AutoBraking are applied at the agent that is approaching the final target. StoppingDistance is the absolute distance that the agent stops in front of the destination, setting this value helps the agent to stabilize and not overshoot. The agent always stops when the remaining distance is less then the agents current movement distance per tick.
+
+AutoBraking is more of a visual feature that slows the agent down before reaching the destination and also can be used to stabilize the agent stopping behavior. The AutoBrakingDistance defines the radius around the destination in which the agent starts to slow down. Internally a square root is used to smooth the braking.
+
+If the navmesh agent is not repelled by geometry using the MovementType PhysicsBody, especially when using avoidance, the agent will move outside the navmesh. To completely prevent this and make the agent slide along the borders of the navmesh enable NavMeshAgentConfig.ClampAgentToNavmesh.
+
+Agents can potentially have a bigger radius then the MinAgentRadius of the navmesh. Quantum supports this by moving the agent waypoints further away from the border but this makes clamping the agent to the navmesh much more complicated and the parameter ClampAgentToNavmeshRadiusThreshold helps to chose which technique should be chosen. Increase the radius when smaller agents tend to move outside the navmesh.
+
+To stabilize the correction the agent is only moved a percentage (ClampAgentToNavmeshCorrection) of its whole penetration depth.
+
+Back To Top
+ 
+
+Update Interval
+For performance optimization reasons each individual agent (config) can be configured to run path-finding and avoidance not every simulation tick. Set NavMeshAgentConfig.UdpateInterval to a value higher than 1 to reduce the amount of updates it gets. This will make the agent less responsive but also saves CPU time. The agent entity index is used to define the exact tick to update, so not all entities are updated at the same tick.
+
+The formula is:
+
+updateAgent = entity.Index % agentConfig.UpdateInterval == f.Number % agentConfig.UpdateInterval
+1 = update every tick
+2 = update every other tick
+8 = update every 8th tick, etc
+Back To Top
+ 
+
+Using Navmesh Agent Callbacks
+All callbacks from the agent are called from the main thread and do not cause multi-threading issues when accessing an writing other components and entities.
+
+Navigation agent callbacks have to be opted in. Open your simulation config and toggle Enable Navigation Callbacks.
+
+Simulation Config
+Enable Navigation Agent Callbacks in the Simulation Config
+The following signals will provide imminent feedback that can be used to further control the agent.
+
+namespace Quantum {
+  public unsafe partial class NavMeshAgentTestSystem : SystemMainThread,
+                                              ISignalOnNavMeshSearchFailed,
+                                              ISignalOnNavMeshWaypointReached,
+                                              ISignalOnNavMeshMoveAgent {
+    }
+}
+ISignalOnNavMeshSearchFailed is called when the agent could not create a path between its current position and the target set in SetTarget(). For example the destination cannot be matched to the navmesh. Set the resetAgent parameter to false when you run SetTarget() during this callback.
+
+ISignalOnNavMeshWaypointReached is called when the agent reached a waypoint on its path to the target. Check out the WaypointFlags enum for more information about the waypoint: Target, LinkStart, LinkEnd.
+
+ISignalOnNavMeshMoveAgent is only called when the NavMeshAgentConfig.MovementType is set to Callback and the agent has a NavMeshSteeringAgent component. The desiredDirection parameter is the normalized direction that the internal steering and avoidance thinks the agent movement vector should be.
+
+public void OnNavMeshMoveAgent(Frame f, EntityRef entity, FPVector2 desiredDirection) {
+    var agent = f.Unsafe.GetPointer<NavMeshSteeringAgent>(entity);
+
+    // simple demonstration how to move the agent.
+    if (f.Has<Transform2D>(entity)) {
+        var transform = f.Unsafe.GetPointer<Transform2D>(entity);
+        transform->Position.X.RawValue = transform->Position.X.RawValue + ((desiredDirection.X.RawValue * f.DeltaTime.RawValue) >> FPLut.PRECISION);
+        transform->Position.Y.RawValue = transform->Position.Y.RawValue + ((desiredDirection.Y.RawValue * f.DeltaTime.RawValue) >> FPLut.PRECISION);
+        transform->Rotation = FPVector2.RadiansSignedSkipNormalize(FPVector2.Up, desiredDirection);
+    } else if (f.Has<Transform3D>(entity)) {
+        var transform = f.Unsafe.GetPointer<Transform3D>(entity);
+        transform->Position.X.RawValue = transform->Position.X.RawValue + ((desiredDirection.X.RawValue * f.DeltaTime.RawValue) >> FPLut.PRECISION);
+        transform->Position.Z.RawValue = transform->Position.Z.RawValue + ((desiredDirection.Y.RawValue * f.DeltaTime.RawValue) >> FPLut.PRECISION);
+        var desiredRotation = FPVector2.RadiansSignedSkipNormalize(FPVector2.Up, desiredDirection);
+        transform->Rotation = FPQuaternion.AngleAxis(desiredRotation * FP.Rad2Deg, -FPVector3.Up);
+    }
+}
+Back To Top
+ 
+
+Common Navmesh Agent Setups
+Path-find Only
+
+Use the MapNavMeshPathfinder component to perform the multi-threaded path-finding, storing the target and waypoints and perform the waypoint index progression. Control the steering, avoidance and movement yourself in your own system.
+
+For the waypoint progression to work the pathfinder component requires information about how fast it is approaching the waypoint. Set the WaypointDetectionDistanceSqr property each frame.
+
+No Avoidance
+
+Only use Pathfinder and SteeringAgent components. No avoidance code will be executed and the components do not store any avoidance relevant data. Toggle off SimulationConfig.Navigation.EnableAvoidance to save CPU time.
+
+Custom Movement But With Quantum Avoidance
+
+Use all three components (Pathfinder, SteeringAgent and AvoidanceAgent). The AvoidanceAgents depends on parts of the SteeringAgent although you want to override it. In the NavMeshAgentConfig set the MovementType to Callback and implement the ISignalOnNavMeshMoveAgent signal (see previous section). The desiredDirection parameter includes the avoidance altered movement direction.

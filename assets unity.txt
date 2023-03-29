@@ -1,0 +1,243 @@
+Assets in Unity
+Overview
+Finding Quantum Assets In Unity Scripts
+Resources, Addressables And Asset Bundles
+Drag-And-Dropping Assets In Unity
+Map Asset Baking Pipeline
+Preloading Addressable Assets
+V1.16 Or Older
+V1.17 Or Newer
+Baking AssetBase Load Information
+Updating Quantum Assets In Build
+Updating Existing Assets
+Adding New Assets
+Example Implementation
+Adding New Assets With DynamicAssetDB
+
+Overview
+Quantum generates a ScriptableObject-based wrapper partial class for each each asset type available in Unity. The base class for such wrappers is AssetBase. The main class managing AssetBase instances is called UnityDB.
+
+Editing a data asset
+Editing properties of a data asset from Unity.
+The Quantum SDK will generate the unique GUIDs for each asset.
+AssetGuids of all the available assets have to be known to the simulation when it starts.
+
+The process for this to happen is:
+
+In the Editor:
+All AssetBase assets collected from the locations defined in QuantumEditorSettings.AssetSearchPaths (by default Assets/Resources/DB).
+Each AssetBase has a generated entry containing the AssetGuid and the information needed to load the AssetBase at runtime.
+Entries are saved into the AssetResourceContainer asset at defined in the QuantumEditorSettings.AssetResourcePath (by default Assets/Resources/AssetResources.asset).
+At runtime:
+The first time any of UnityDB members is used AssetResourceContainer is loaded using Resources.Load (based on QuantumEditorSettings.AssetResourcePath).
+The list of entries is used to initialize the simulation's IResourceManager along with the information needed to load each asset dynamically.
+To browse the list of Asset Objects currently part of the database, use the AssetDB Inspector window accessible via Quantum/Show AssetDB Inspector and Window/Quantum/AssetDB Inspector menu items.
+
+
+Back To Top
+ 
+
+Finding Quantum Assets In Unity Scripts
+Every concrete asset class created by the user gets a corresponding class generated on the Unity side to enable their instantiation as actual Unity Scriptable Objects.
+
+Just to exemplify: a Quantum asset named CharacterData gets, in Unity, a class named CharacterDataAsset, where the word Asset is always the suffix added. The Unity class always contains a Property named AssetObject which can be cast to the Quantum class in order to access the simulation specific fields.
+
+Use the UnityDB class in order to find assets in the Unity side. Here is a complete snippet of a Quantum asset declaration, and how to access it's fields on Unity:
+
+In the Quantum side:
+
+// in any .qtn file:
+asset CharacterData;
+
+// in a .cs file:
+public unsafe partial class CharacterData
+{
+    public FP MaximumHealth;
+}
+In the Unity side:
+
+var characterDataAsset = UnityDB.FindAsset<CharacterDataAsset>(myAssetRef.Id);
+var characterData = characterDataAsset.Settings;
+FP maximumHealth = characterData.MaximumHealth;
+Back To Top
+ 
+
+Resources, Addressables And Asset Bundles
+Quantum never forms hard-references to AssetBase assets. This enables the use of any dynamic content delivery. The following methods of loading assets are supported out of the box:
+
+Resources
+Addressables (needs to be explicitly enabled)
+Asset Bundles (as a proof-of-concept, due to Asset Bundles demanding highly custom, per-project approach)
+Enabling Addressables
+Enabling Addressables in QuantumEditorSettings. Alternatively, define `QUANTUM_ADDRESSABLES` and `QUANTUM_ADDRESSABLES_WAIT_FOR_COMPLETION` (for Addressables 1.17 or newer).
+There are not any extra steps needed for AssetBase to be loadable dynamically using any of the methods above. The details on how to load each asset are stored in AssetResourceContainer. This information is accessed when a simulation calls Frame.FindAsset or when UnityDB.FindAsset is called and leads to an appropriate method of loading being used.
+
+If an asset is in a Resource folder, it will be loaded using the Resources API.
+If an asset has an address (explicit or implicit), it will be loaded using the Addressables API.
+If an asset belongs to an Asset Bundle (explicitly or implicitly), there will be an attempt to load it using the AssetBundle API.
+To make the list of the assets (AssetResourceContainer) dynamic itself some extra code is needed; pleasr refer to the Updating Quantum Assets At Runtime section for more information.
+
+User scripts can avoid hard references by using AssetRef types (e.g. AssetRefSimulationConfig) instead of AssetBase references (e.g. SimulationConfig) to reference Quantum assets.
+
+public class TestScript : MonoBehaviour {
+  // hard reference
+  public SimulationConfigAsset HardRef;
+  // soft reference
+  public AssetRefSimulationConfig SoftRef;
+
+  void Start() {
+    // depending on the target asset's settings, this call may result in
+    // any of the supported loading methods being used
+    SimulationConfigAsset config = UnityDB.FindAsset<SimulationConfigAsset>(SoftRef.Id);
+  }
+}
+Back To Top
+ 
+
+Drag-And-Dropping Assets In Unity
+Adding asset instances and searching them through the Frame class from inside simulation Systems can only go so far. At convenient solution arises from the ability to have asset instances point to database references and being able to drag-and-drop these references inside Unity Editor.
+
+One common use is to extend the pre-build RuntimePlayer class to include an AssetRef to a particular CharacterSpec asset chosen by a player. The generated and type-safe asset_ref type is used for linking references between assets or other configuration objects.
+
+// this is added to the RuntimePlayer.User.cs file
+namespace Quantum {
+  partial class RuntimePlayer {
+    public AssetRefCharacterSpec CharacterSpec;
+
+    partial void SerializeUserData(BitStream stream) {
+      stream.Serialize(ref CharacterSpec);
+    }
+  }
+}
+This snippet will allow for an asset_ref field to generated which will only accept a link to an asset of type CharacterSpec. This field will show up in the Unity inspector and can be populated by drag-and-dropping an asset into the slot.
+
+Drag & Drop Asset
+Asset ref properties are shown as type-safe slots for Quantum scriptable objects.
+Back To Top
+ 
+
+Map Asset Baking Pipeline
+Another entry point for generating custom data in Quantum is the map baking pipeline. The MapAsset is the AssetBase-based wrapper for Map asset.
+
+The Map asset is required by a Quantum simulation and contains basic information such as Navmeshes and static colliders; additional custom data can be saved as part of the asset placed in its custom asset slot - this can be an instance of any custom data asset. The custom asset can be used to store any static data meant to be used during initialization or at runtime. A typical example would be an array of spawn point data such as position, spawned type, etc.
+
+In order for a Unity scene to be associated with a MapAsset, the MapData MonoBehaviour component needs to be present on a GameObject in the scene. Once MapData.Asset points to a valid MapAsset, the baking process can take place. By default, Quantum bakes navmeshes, static colldiers and scene prototypes automatically as a scene is saved or when entering play mode; this behaviour can be changed in QuantumEditorSettings.
+
+To assign a custom piece of code to be called every time the a bake happens, create a class inheriting from the abstract MapDataBakerCallback class.
+
+public abstract class MapDataBakerCallback {
+  public abstract void OnBake(MapData data);
+  public abstract void OnBeforeBake(MapData data);
+  public virtual void OnBakeNavMesh(MapData data) { }
+  public virtual void OnBeforeBakeNavMesh(MapData data) { }
+}
+Then override the mandatory OnBake(MapData data) and OnBakeBefore(MapData data) methods.
+
+public class MyCustomDataBaker: MapDataBakerCallback {
+  public void OnBake(MapData data) {
+    // any custom code to live-load data from scene to be baked into a custom asset
+    // generated custom asset can then be assigned to data.Asset.Settings.UserAsset
+  }
+  public void OnBeforeBake(MapData data) {
+
+  }
+}
+Back To Top
+ 
+
+Preloading Addressable Assets
+Quantum needs assets to be loadable synchronously.
+
+
+V1.16 Or Older
+In the Addressables version prior to 1.17, there were no means to load Addressable assets synchronously other than preloading before the simulation started or using Unity's SyncAddressables sample.
+
+Back To Top
+ 
+
+V1.17 Or Newer
+WaitForCompletion was addded in Addressables 1.17 which added the ability to load assets synchronously. To enable it for Quantum, define QUANTUM_ADDRESSABLES_USE_WAIT_FOR_COMPLETION or use the toggles in the QuantumEditorSettings asset's Build Features section.
+
+Although synchronous loading is possible, there are situations in which preloading assets might still be preferable; the QuantumRunnerLocalDebug.cs script demonstrates how to achieve this.
+
+Back To Top
+ 
+
+Baking AssetBase Load Information
+AssetResourceContainer is a ScriptableObject containing information on how to load each AssetBase and maps them to AssetGuids.
+
+N.B.: `AssetBase` is not a Quantum asset itself.
+Every time the menu option Quantum > Generate Asset Resources is used or an asset in one of QuantumEditorSettings.AssetSearchPaths is imported, the AssetResourceContainer is recreated in full at the location specified by the QuantumEditorSettings.AssetResourcePath.
+
+During the creation of the AssetResourceContainer, each AssetBase located in any QuantumEditorSettings.AssetSearchPaths is assigned to a group. By default, three groups exist:
+
+ResourcesGroup;
+AssetBundlesGroup; and,
+AddressablesGroup.
+The process of deciding which group an asset is assigned to is shown in the diagram below.
+
+AssetResourceContainer generation
+The flow of assigning an asset a group.
+An asset is considered Addressable if:
+
+it has an address assigned;
+any of its parent folders is Addressable; or,
+it is nested in another Addressable asset.
+The same logic applies to deciding whether an asset is a part of an Asset Bundle.
+
+To disable baking AssetBase when assets are imported, untick QuantumEditorSettings.UseAssetBasePostprocessor.
+
+Back To Top
+ 
+
+Updating Quantum Assets In Build
+It is possible for an external CMS to provide data assets; this is particularly useful for providing balancing updates to an already released game without making create a new build to which players would have to update.
+
+This approach allows balancing sheets containing information about data-driven aspects such as character specs, maps, NPC specs, etc... to be updated independently from the game build itself. In this case, game clients would always try to connect to the CMS service, check for whether there is an update and (if necessary) upgrade their game data to the most recent version before starting or joining online matches.
+
+Back To Top
+ 
+
+Updating Existing Assets
+The use of Addressables or Asset Bundles is recommended as these are supported out of the box. Any AssetBase that is an Addressable or part of an Asset Bundle will get loaded at runtime using the appropriate methods.
+
+To avoid unpredictable lag spikes resulting from downloading assets during the game simulation, consider downloading and preloading your assets as discussed here: Preloading Addressable Assets.
+
+Back To Top
+ 
+
+Adding New Assets
+The AssetResourceContainer generated in the editor will contain the list of all the assets present at its creation. If a project's dynamic content includes adding new Quantum assets during without creating a new build, a way to update the list needs to be implemented.
+
+The recommended approach to achieve this is with an extension of the partial UnityDB.LoadAssetResourceContainerUser method. When the first simulation starts or any UnityDB method is called, Quantum will make an attempt to load the AssetResourceContainer. By default it is assumed the AssetResourcesContainer is a Resource located at the QuantumEditorSettings.AssetResourcePath. To override this behaviour, UnityDB.LoadAssetResourceContainerUser needs to be implemented.
+
+Back To Top
+ 
+
+Example Implementation
+First, the AssetResourceContainer needs to be moved out of the Resources folder. This is done by setting the QuantumEditorSettings.AssetResourcePath:
+
+AssetResourceContainer Path Override
+Second, the new AssetResourceContainer needs to be made into an Addressable:
+
+Addressable AssetResourceContainer
+Finally, the snippet implementing the partial method:
+
+partial class UnityDB {
+  static partial void LoadAssetResourceContainerUser(ref AssetResourceContainer container) {
+    var path = QuantumEditorSettings.Instance.AssetResourcesPath;
+
+#if UNITY_EDITOR
+    if (!UnityEditor.EditorApplication.isPlaying) {
+      container = UnityEditor.AssetDatabase.LoadAssetAtPath<AssetResourceContainer>(path);
+      Debug.Assert(container != null);
+      return;
+    }
+#endif
+
+    var op = Addressables.LoadAssetAsync<AssetResourceContainer>(path);
+    container = op.WaitForCompletion();
+    Debug.Assert(container != null);
+  }
+}
+This is a simplified implementation and, depending on project's needs, some management of the `AsyncOperationHandle` returned by `Addressables.LoadAssetAsync` may need to be added.

@@ -1,0 +1,518 @@
+HTTP Requests
+
+CustomQuantumPlugin
+Defer plugin callbacks like OnCreateGame() to retrieve any specific room configurations from a trusted backend and block the room creation momentarily. The same is possible for call room callbacks with an info object (OnJoin(),..).
+
+public override void OnCreateGame(ICreateGameCallInfo info) {
+  var request = new HttpRequest() { Url = "http://microsoft.com", Async = false, Callback = OnCreateGameContinue };
+  PluginHost.HttpRequest(request, info);
+
+  // Do not call base.OnCreateGame() to prevent the continuation
+}
+
+private void OnCreateGameContinue(IHttpResponse response, object userState) {
+  // Complete the OnCreateGame() call
+  base.OnCreateGame((ICreateGameCallInfo)response.CallInfo);
+}
+Back To Top
+ 
+
+CustomQuantumServer
+Defer Quantum server callbacks to overwrite RuntimePlayer with data fetched from a trusted backend.
+
+IPluginHost.HttpRequest(request, info) can be used with info = null.
+
+Request has to be Async = true.
+
+public override bool OnDeterministicPlayerDataSet(DeterministicPluginClient client, SetPlayerData playerData) {
+  // Use client.ClientId as unique client id (UserId)
+  var request = new HttpRequest() { Url = "http://microsoft.com", Async = true, Callback = OnDeterministicPlayerDataSetContinue, UserState = playerData.Index };
+  ((DeterministicPlugin)PluginHost).PluginHost.HttpRequest(request, null);
+
+  // Return false to not conntinue with SetPlayerData request
+  return false;
+}
+
+private void OnDeterministicPlayerDataSetContinue(IHttpResponse response, object userState) {
+  private void OnDeterministicPlayerDataSetContinue(IHttpResponse response, object userState) {
+    // Reponse sends player data in json for example: deserialize json into RuntimePlayer
+    var runtimePlayer = new RuntimePlayer();
+
+    SetPlayerData data = new SetPlayerData {
+      Data = RuntimePlayer.ToByteArray(runtimePlayer),
+      Index = (int)userState
+    };
+
+    // continue the interupted flow of Photon.Deterministic.Server.DeterministicServer.OnDeterministicPlayerDataSet
+    SetDeterministicPlayerData(data);
+  }
+}
+Back To Top
+ 
+
+Save Replay / Input History Snippet
+Input history is an array (number of ticks) of DeterministicTickInputSet objects which in turn store the input for each player:
+
+public struct DeterministicTickInputSet {
+  public int Tick;
+  public DeterministicTickInput[] Inputs;
+}
+Save the input inside the InputProvider class during the OnDeterministicInputConfirmed() callback. This is when the input for a player has been confirmed. Or create a custom similar data structure.
+
+public override void OnDeterministicSessionConfig(DeterministicPluginClient client, SessionConfig configData)
+{
+  _config = configData.Config;
+}
+public override void OnDeterministicStartSession() {
+  _inputProvider = new InputProvider(_config);
+}
+public override void OnDeterministicInputConfirmed(DeterministicPluginClient client, int tick, int playerIndex, DeterministicTickInput input) {
+  _inputProvider.InjectInput(input, true);
+}
+Use the ReplayFile data structure to create a complete replay with required config files. The serializer is a QuantumJsonSerializer that outputs JSON.
+
+private void SaveReplayToFile(int verifiedFrame) {
+  var replayFile = new ReplayFile {
+    DeterministicConfig = container.DeterministicConfig,
+    RuntimeConfig = container.RuntimeConfig,
+    InputHistory = _inputProvider.ExportToList(verifiedFrame),
+    Length = verifiedFrame
+  };
+
+
+  var filepath = Path.Combine(PluginLocation, "replay.json");
+  File.WriteAllBytes(filepath, _serializer.SerializeReplay(replayFile));
+}
+Save the ReplayFile without knowing the highest verified tick.
+
+private void SaveReplayToFile() {
+  // This will not cut out incomplete input in the end, but we should be able to live with it
+  var inputSets = _inputProvider.ExportToList(int.MaxValue);
+
+  // Find out what the highest verified tick that has a complete input set (for all players)
+  int maxVerifiedTick = 0;
+  for (int i = inputSets.Length - 1; i >= 0; i--) {
+    if (inputSets[i].IsComplete()) {
+      maxVerifiedTick = inputSets[i].Tick;
+      break;
+    }
+  }
+
+  var replayFile = new ReplayFile {
+    DeterministicConfig = container.DeterministicConfig,
+    RuntimeConfig = container.RuntimeConfig,
+    InputHistory = inputSets,
+    Length = maxVerifiedTick
+  };
+
+
+  var filepath = Path.Combine(PluginLocation, "replay.json");
+  File.WriteAllBytes(filepath, _serializer.SerializeReplay(replayFile));
+}
+Back To Top
+ 
+
+Server Command Snippet
+A snippet showing how to intercept commands sent by clients, possibly reject them and send commands from the server itself.
+
+private DeterministicCommandSerializer _cmdSerializer;
+
+public override bool OnDeterministicCommand(DeterministicPluginClient client, Command cmd) {
+  if (_cmdSerializer == null) {
+    _cmdSerializer = new DeterministicCommandSerializer();
+    _cmdSerializer.RegisterFactories(DeterministicCommandSetup.GetCommandFactories(runtimeConfig, null));
+
+    _cmdSerializer.CommandSerializerStreamRead.Reading = true;
+    _cmdSerializer.CommandSerializerStreamWrite.Writing = true;
+  }
+
+  var stream = _cmdSerializer.CommandSerializerStreamRead;
+
+  stream.SetBuffer(cmd.Data);
+
+  if (_cmdSerializer.ReadNext(stream, out var command)) {
+    // handle DeterministicCommand
+
+    // return false if a command should be rejected from the (or any) client
+    if (command is TestCommand testCmd) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+public void SendDeterministicCommand(DeterministicCommand cmd) {
+  if (_cmdSerializer == null) {
+    _cmdSerializer = new DeterministicCommandSerializer();
+    _cmdSerializer.RegisterFactories(DeterministicCommandSetup.GetCommandFactories(runtimeConfig, null));
+
+    _cmdSerializer.CommandSerializerStreamRead.Reading = true;
+    _cmdSerializer.CommandSerializerStreamWrite.Writing = true;
+  }
+
+  var stream = _cmdSerializer.CommandSerializerStreamWrite;
+
+  stream.Reset(stream.Capacity);
+
+  if (_cmdSerializer.PackNext(stream, cmd)) {
+
+    SendDeterministicCommand(new Command {
+      Index = 0,
+      Data = stream.ToArray(),
+    });
+
+    // optional: pool byte arrays and use them instead of allocating with ToArray()
+    // Buffer.BlockCopy(stream.Data, stream.Offset, pooledByteArray, 0, stream.BytesRequired);
+  }
+}
+Back To Top
+ 
+
+Subscribing To Quantum Events And Callbacks
+It is possible to, from the custom plugin, react to Quantum Events (defined and triggered in the simulation code) and Quantum Callbacks (defined and triggered from Unity).
+
+That can achieved that by adding events and callbacks dispatchers to the start parameters in the OnDeterministicStartSession() callback on the custom plugin:
+
+// given a Quantum Event named "Foo", defined in the Quantum simulation code
+
+public override void OnDeterministicStartSession()
+{
+    // Create an instance of an EventDispacther
+    var events = new EventDispatcher();
+    // Subscribe to the Quantum event
+    events.Subscribe<EventFoo>(this, EventReaction);
+    // Insert it in the params
+    startParams.EventDispatcher = events;
+
+    // Same goes for the CallbackDispatcher
+    var callbacks = new CallbackDispatcher();
+    callbacks.Subscribe<CallbackGameStarted>(this, c => Log.Warn(c.Game.Session.FrameVerified.Number));
+    startParams.CallbackDispatcher = callbacks;
+
+    // the dispatchers are then injected within the paramrs object
+    container.StartReplay(startParams, inputProvider, "server", false, taskRunner: taskRunner);
+}
+
+// This is just a demonstration of the event callback reaction
+// It works exactly the same as reacting to events from Unity code
+private void EventReaction(EventFoo e) { }
+Back To Top
+ 
+
+Majority Vote
+Clients upload their game result to the server, the server waits until a majority vote can be issued, computes one result to publish.
+A custom c# class is used to represent the result. In this example the server plugin only operates on the binary data, which is enough to check for equal results. But when the information is forwarded to a custom backend (not implemented) if the backend expects other data format then the sever plugin requires the deserialization code before sending it (reference to the game.dll for example).
+Back To Top
+ 
+
+Changes To Custom Quantum Plugin Class
+Forces an evaluation right before the room is closed
+Overrides OnRaiseEvent() to filter out the custom message, always cancels the message so it's not forwarded to other clients.
+using Photon.Deterministic;
+using Photon.Deterministic.Server.Interface;
+using Photon.Hive.Plugin;
+
+namespace Quantum {
+  public class CustomQuantumPlugin : DeterministicPlugin {
+    protected CustomQuantumServer _server;
+
+    public CustomQuantumPlugin(IServer server) : base(server) {
+      Assert.Check(server is CustomQuantumServer);
+      _server = (CustomQuantumServer)server;
+    }
+
+    public override void OnCloseGame(ICloseGameCallInfo info) {
+      EvaluateMajorityVote(true);
+      _majorityVote?.Dispose();
+      _majorityVote = null;
+      _server.Dispose();
+      base.OnCloseGame(info);
+    }
+
+    private MajorityVote _majorityVote = new MajorityVote(2);
+
+    private void EvaluateMajorityVote(bool force) {
+      if (_majorityVote != null) {
+        if (force || _majorityVote.IsReady || _majorityVote.IsWaitingTimeOver) {
+          if (_majorityVote.Evaluate(out var results)) {
+            // Send data somewhere
+            //results[0].Data
+            Log.Warn($"Game result accepted with {results[0].Count}");
+            _majorityVote.Dispose();
+            _majorityVote = null;
+          }
+        }
+      }
+    }
+
+    public override void OnRaiseEvent(IRaiseEventCallInfo info) {
+      if (info.Request.EvCode == 41) {
+        // Cancel the message right away, it should not be send to anyone else
+        info.Cancel();
+
+        var client = _server.GetClientForActor(info.ActorNr);
+        if (client == null) {
+          // Dismiss the message when the client has already left
+          return;
+        }
+
+        if (info.Request.Data == null) {
+          // Client send no data, disconnect
+          _server.DisconnectClient(client, "Operation Failed");
+          return;
+        }
+
+        if (_majorityVote == null) {
+          // Vote is over
+          return;
+        }
+
+        _majorityVote.AddVote(client.ClientId, (byte[])info.Request.Data);
+        EvaluateMajorityVote(false);
+
+        // Don't process message any further
+        return;
+      }
+
+      base.OnRaiseEvent(info);
+    }
+  }
+}
+Back To Top
+ 
+
+Majority Vote Class
+The timings around min required votes and wait time settings are depending on the actual game: How many players? Does the game have teams? Etc.
+
+There probably is something faster than StructuralComparisons.StructuralEqualityComparer. Although Linq offers nice collection tools it not be used on server code.
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+
+namespace Quantum {
+  /// <summary>
+  /// Trying to not use Linq for performance.
+  /// Only compares binary data, serialzed by the client.
+  ///   The final result should be send to backend to deserialize or deserialize on custom plugin with correct references.
+  /// </summary>
+  public class MajorityVote : IDisposable {
+    private bool _startWaitTimeSet;
+    private DateTime _startWaitTime;
+    private double _minWaitTimeSec;
+    private double _maxWaitTime;
+    private int _minVotesRequired;
+    private List<ClientResult> _clientResults;
+    private HashSet<string> _clientResultsHashset;
+    private MD5CryptoServiceProvider _hashProvider;
+
+    /// <summary>
+    /// There is at least one result and at least MinVotesRequired.
+    /// The MinWaitingTime has passed.
+    /// </summary>
+    public bool IsReady {
+      get {
+        return
+          _clientResults.Count >= _minVotesRequired &&
+          (DateTime.Now - _startWaitTime).TotalSeconds >= _minWaitTimeSec;
+      }
+    }
+
+    /// <summary>
+    /// The MaxWaitingTime has passed a result be tried to evaluate now.
+    /// </summary>
+    public bool IsWaitingTimeOver {
+      get {
+        return
+          _maxWaitTime > 0 &&
+          (DateTime.Now - _startWaitTime).TotalSeconds >= _maxWaitTime;
+      }
+    }
+
+    /// <summary>
+    /// Number of client votes, indentified by their ClientId.
+    /// </summary>
+    public int Count => _clientResults.Count;
+
+    /// <summary>
+    /// Create a voting machine.
+    /// </summary>
+    /// <param name="minVotesRequired">The minimal votes required to make IsReady return true</param>
+    /// <param name="minWaitTimeSec">The min wait tim in seconds to make IsReady return true</param>
+    /// <param name="maxWaitTime">The max wait time in seconds to make IsWaitingTimeOver return true, 0 = undefinately</param>
+    public MajorityVote(int minVotesRequired, double minWaitTimeSec = 0, double maxWaitTime = 0) {
+      _minVotesRequired = Math.Max(minVotesRequired, 1);
+      _minWaitTimeSec = minWaitTimeSec;
+      _maxWaitTime = maxWaitTime;
+      _clientResults = new List<ClientResult>();
+      _clientResultsHashset = new HashSet<string>();
+      _hashProvider = new MD5CryptoServiceProvider();
+    }
+
+    /// <summary>
+    /// Disposes the hash provider object and clears internal lists.
+    /// </summary>
+    public void Dispose() {
+      _clientResults?.Clear();
+      _clientResults = null;
+
+      _clientResultsHashset?.Clear();
+      _clientResultsHashset = null;
+
+      _hashProvider?.Dispose();
+      _hashProvider = null;
+    }
+
+    /// <summary>
+    /// Add a vote for a ClientId. If a client already passed the vote subsequent times are ignored.
+    /// </summary>
+    /// <param name="clientId">The clients id</param>
+    /// <param name="data">The result as byte[] array</param>
+    public void AddVote(string clientId, byte[] data) {
+      if (_clientResultsHashset.Contains(clientId) == false) {
+        var hash = _hashProvider.ComputeHash(data);
+        var result = new ClientResult { ClientId = clientId, Result = data, Hash = hash };
+        _clientResults.Add(result);
+        _clientResultsHashset.Add(clientId);
+      }
+
+      if (_startWaitTimeSet == false && Count >= 2) {
+        // Only start the waitime when two votes have been cast. Two votes because one would be too easy to missuse.
+        _startWaitTime = DateTime.Now;
+        _startWaitTimeSet = true;
+      }
+    }
+
+    /// <summary>
+    /// Run majority vote for the votes that have been cast.
+    /// </summary>
+    /// <param name="finalResults">Summary of the results, sorted by count</param>
+    /// <returns>True if there has been consensus.</returns>
+    public bool Evaluate(out List<FinalResult> finalResults) {
+      var map = new Dictionary<byte[], FinalResult>(ByteArrayComparer.Default);
+
+      var majority = 0;
+      if (_clientResults.Count % 2 == 0) {
+        majority = _clientResults.Count / 2 + 1;
+      }
+      else {
+        majority = (int)Math.Ceiling(_clientResults.Count / (double)2);
+      }
+
+      // Compare each result hash with eath other
+      for (int i = 0; i < _clientResults.Count; i++) {
+        var vote = default(FinalResult);
+        if (map.TryGetValue(_clientResults[i].Hash, out vote) == false) {
+          vote = new FinalResult { ClientIds = new List<string>(), Result = _clientResults[i].Result };
+          map.Add(_clientResults[i].Hash, vote);
+        }
+
+        vote.ClientIds.Add(_clientResults[i].ClientId);
+        vote.Count++;
+      }
+
+      // Sort
+      finalResults = new List<FinalResult>();
+      foreach (var v in map) {
+        finalResults.Add(v.Value);
+      }
+      finalResults.Sort(FinalResult.CompareByCount);
+
+      if (finalResults.Count > 0 && finalResults[0].Count >= majority) {
+        return true;
+      }
+
+      return false;
+    }
+
+    public class FinalResult {
+      public byte[] Result;
+      public int Count;
+      public List<string> ClientIds;
+
+      public static int CompareByCount(FinalResult a, FinalResult b) {
+        return a.Count.CompareTo(b.Count);
+      }
+    }
+
+    private class ClientResult {
+      public string ClientId;
+      public byte[] Result;
+      public byte[] Hash;
+    }
+
+    private class ByteArrayComparer : IEqualityComparer<byte[]> {
+      private static ByteArrayComparer _default;
+
+      public static ByteArrayComparer Default {
+        get {
+          if (_default == null) {
+            _default = new ByteArrayComparer();
+          }
+
+          return _default;
+        }
+      }
+
+      public bool Equals(byte[] a, byte[] b) {
+        return StructuralComparisons.StructuralEqualityComparer.Equals(a, b);
+      }
+
+      public int GetHashCode(byte[] obj) {
+        return StructuralComparisons.StructuralEqualityComparer.GetHashCode(obj);
+      }
+    }
+  }
+}
+Back To Top
+ 
+
+Unity Test Code
+Sending to the plugin using OpRaiseEvent()
+Uses ByteArraySlice to send binary data to reduce further allocations
+The result should be taken from a verified frame and it should be the same on each (untampered) client
+using ExitGames.Client.Photon;
+using Photon.Realtime;
+using Quantum.Demo;
+using UnityEngine;
+
+public class SendGameResult : MonoBehaviour {
+  private readonly ByteArraySlice _sendSlice = new ByteArraySlice();
+
+  private class GameResult {
+    public struct Place {
+      public string PlayerId;
+      public int Points;
+    }
+    public Place[] Ranking;
+
+    public void Serialize(Photon.Deterministic.BitStream stream) {
+      foreach (var r in Ranking) {
+        stream.WriteString(r.PlayerId);
+        stream.WriteInt(r.Points);
+      }
+    }
+  }
+
+  private void Update() {
+    // Use ByteSliceArray for optimization (non-alloc)
+    // Gather results from a verified frame only (otherwise prediciton can differ)
+    if (Input.GetKeyDown(KeyCode.Space)) {
+      var gameResult = new GameResult { Ranking = new GameResult.Place[] {
+        new GameResult.Place { PlayerId = "a", Points = 1 },
+        new GameResult.Place { PlayerId = "b", Points = 2 } }
+      };
+
+      var stream = new Photon.Deterministic.BitStream(new byte[100 * 1024]);
+      gameResult.Serialize(stream);
+
+      _sendSlice.Buffer = stream.Data;
+      _sendSlice.Count = stream.BytesRequired;
+      _sendSlice.Offset = 0;
+
+      UIMain.Client.OpRaiseEvent(41, _sendSlice, RaiseEventOptions.Default, SendOptions.SendReliable);
+    }
+  }
+}

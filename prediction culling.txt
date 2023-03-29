@@ -1,0 +1,107 @@
+Introduction
+Prediction Culling is used in games where players only have a partial view of the game world at any given time. It is safe to use and simple to activate.
+
+Prediction Culling allows to save CPU time during the Quantum prediction and rollback phases. Having it enabled will allow the predictor to run exclusively for important and visible entities to the local player(s), while leaving anything outside the view to be simulated only once per tick once the inputs are confirmed by the server; thus avoiding rollbacks wherever possible.
+
+Although the performance benefits vary from game to game, they can be quite large; this is particularly important the more players you have, as the predictor will eventually miss at least for one of them. Take for instance a game running at a 30Hz simulate rate. If the game requires an average of a ten tick rollback per confirmed input, this means the game simulation will have to lightweight enough to run close to 300Hz (including rollbacks). Using Prediction Culling, full frames will be simulated at the expected 30/60Hz at all times, and the culling will be applied to the prediction area is running within the prediction buffer.
+
+Back To Top
+ 
+
+Setting Up Prediction Culling
+As a consequence of Prediction Culling means the predicted simulation can never be accepted as the final result of a frame since part of it was culled, thus it never advanced the simulation of the whole game state.
+
+To set up prediction culling, there are two steps; one in Quantum and one in Unity.
+
+Back To Top
+ 
+
+In Quantum
+Enabling prediction culling in Quantum is a simple as adding the culling systems to SystemSetup.cs before any of the other systems.
+
+namespace Quantum {
+  public static class SystemSetup {
+    public static SystemBase[] CreateSystems(RuntimeConfig gameConfig, SimulationConfig simulationConfig) {
+      return new SystemBase[] {
+        // pre-defined core systems
+        new Core.CullingSystem2D(),
+        new Core.CullingSystem3D(),
+
+        new Core.PhysicsSystem2D(),
+        new Core.PhysicsSystem3D(),
+
+        new Core.NavigationSystem(),
+        new Core.EntityPrototypeSystem(),
+
+        // user systems go here
+      };
+    }
+  }
+}
+By default both Core.CullingSystem2D() and Core.CullingSystem3D() are included in SystemSetup.
+
+Back To Top
+ 
+
+In Unity
+In Unity, you need to set the prediction area. This will be used to decide which entities to cull from prediction. You can update the prediction area by calling SetPredictionArea() on every Unity update:
+
+// center is either FPVector2 or FPVector3
+// radius is an FP
+QuantumRunner.Default.Game.SetPredictionArea(center, radius);
+Back To Top
+ 
+
+What To Expect
+
+Physics And Navmesh Agents
+The physics engines and the NavMesh related systems are affected by Prediction Culling.
+
+When Prediction Culling is enabled, they will only consider and update entities within the visible area on non-verified, i.e. predicted, frames.
+
+CPU cycles are saved on account of physics and navmesh related agents skipping updates for any entity with the relevant component (PhysicsCollider, PhysicsBody, NavMeshPathFinder, NavMeshSteeringAgent, NavMeshAvoidanceAgent) and outside the area of interest as defined by the Prediction Area center point and radius on the local machine.
+
+Back To Top
+ 
+
+Iterators
+Your own code will also benefit from Prediction Culling. Any filter that includes a Transform2D or Transform3D will be subject to culling based on their positions.
+
+Essentially whenever a prediction frame is running, calling any of the methods below will only return entities within the limits o the prediction radius, while the same call will return all active instances when simulating the verified frames after input confirmations arrive).
+
+f.Filter()
+f.Unsafe.FilterStruct()
+N.B.: While filters benefit from Prediction Culling, component iterators do NOT.
+
+f.GetComponentIterator()
+f.Unsafe.GetComponentBlockIterator()
+Back To Top
+ 
+
+Manual Culling Control Flags
+It is also possible to manually flag entities for culling on predicted frames via the API provided via the Frame.
+
+Method	Description
+SetCullable(EntityRef entityRef, bool cullable)	Sets if an entity can be culled or not. Does nothing if the entity does not exist (including invalid entity refs).
+IsCulled(EntityRef entityRef)	If an entity is currently culled from the simulation, regardless of the frame state (Predicted or Verified).
+True if the entity is culled (for instance, not inside the prediction area) or does not exist.
+False otherwise (if the entity exists and is not being culled).
+Culled(EntiyRef entityRef)	If an entity is prediction-culled.
+True if the frame is Predicted AND the entity IsCulled.
+False otherwise (if the frame is Verified or the entity is not culled).
+Cull(EntiyRef entityRef)	Manually marks a cullable and existing entity as culled for this tick.	Does nothing if the entity does not exist or is not cullable.
+ClearCulledState()	Resets the culling state of all entities on that frame.	Called automatically at the beginning of every frame simulation.
+To keep a consistent state and avoid desync, de-flag the culled entities on verified frames in the same systems you originally flag them. from the same system, so you keep a consistent state and do not desync.
+
+Back To Top
+ 
+
+Avoiding RNG Issues
+Using RNGSession instances with Prediction Culling is perfectly safe and determinism is guaranteed. However, their combined use can result in some visual jitter when two entities share a RNGSession, such as the default one stored in Quantum's _globals_. This is due to new a RNG value being generated for a predicted entity after a verifited frame was simulated, thus changing/modifying the entity's final position.
+
+The solution is to store an isolated RNGSession struct in each entity subject to culling. The isolation guarantees culling will not affect the final positions of predicted entities unless the rollback actually required it.
+
+struct SomeStruct {
+    RNGSession MyRNG;
+}
+You can inject each RNGSession with their seeds in any way you desire.

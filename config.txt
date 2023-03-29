@@ -1,0 +1,88 @@
+Quantum.SimulationConfig Class Reference
+The SimulationConfig holds parameters used in the ECS layer and inside core systems like physics and navigation. More...
+
+Inherits Quantum.AssetObject, and Quantum.AssetObject.
+
+Public Attributes
+AutoLoadSceneFromMapMode 	AutoLoadSceneFromMap = AutoLoadSceneFromMapMode.UnloadPreviousSceneThenLoad
+ 	This option will trigger a Unity scene load during the Quantum start sequence.
+This might be convenient to start with but once the starting sequence is customized disable it and implement the scene loading by yourself. "Previous Scene" refers to a scene name in Quantum Map. More...
+ 
+SimulationConfigChecksumErrorDumpOptions 	ChecksumErrorDumpOptions
+ 	Additional options for checksum dumps, if the default settings don't provide a clear picture. More...
+ 
+FP 	ChecksumSnapshotHistoryLengthSeconds = 3
+ 	How long to store checksumed verified frames. The are used to generate a frame dump in case of a checksum error happening. Not used in Replay and Local mode. More...
+ 
+SimulationUpdateTime 	DeltaTimeType = SimulationUpdateTime.Default
+ 	Configure how the client tracks the time to progress the Quantum simulation from the QuantumRunner class. More...
+ 
+FrameBase.EntitiesConfig 	Entities
+ 	Global entities configuration More...
+ 
+int 	HeapExtraCount = 0
+ 	Sets extra heaps to allocate for a session in case you need to create 'auxiliary' frames than actually required for the simulation itself More...
+ 
+int 	HeapPageCount = 256
+ 	Define the max heap page count for memory the frame class uses for custom allocations like QList<> for example. More...
+ 
+int 	HeapPageShift = 15
+ 	Define the max heap size for one page of memory the frame class uses for custom allocations like QList<> for example. More...
+ 
+Navigation.Config 	Navigation
+ 	Global navmesh configurations. More...
+ 
+PhysicsCommon.Config 	Physics
+ 	Global physics configurations. More...
+ 
+int 	ThreadCount = 2
+ 	Override the number of threads used internally. More...
+ 
+Detailed Description
+The SimulationConfig holds parameters used in the ECS layer and inside core systems like physics and navigation.
+
+Member Data Documentation
+◆ Navigation
+Navigation.Config Quantum.SimulationConfig.Navigation
+Global navmesh configurations.
+
+◆ Physics
+PhysicsCommon.Config Quantum.SimulationConfig.Physics
+Global physics configurations.
+
+◆ Entities
+FrameBase.EntitiesConfig Quantum.SimulationConfig.Entities
+Global entities configuration
+
+◆ AutoLoadSceneFromMap
+AutoLoadSceneFromMapMode Quantum.SimulationConfig.AutoLoadSceneFromMap = AutoLoadSceneFromMapMode.UnloadPreviousSceneThenLoad
+This option will trigger a Unity scene load during the Quantum start sequence.
+This might be convenient to start with but once the starting sequence is customized disable it and implement the scene loading by yourself. "Previous Scene" refers to a scene name in Quantum Map.
+
+◆ DeltaTimeType
+SimulationUpdateTime Quantum.SimulationConfig.DeltaTimeType = SimulationUpdateTime.Default
+Configure how the client tracks the time to progress the Quantum simulation from the QuantumRunner class.
+
+◆ HeapPageShift
+int Quantum.SimulationConfig.HeapPageShift = 15
+Define the max heap size for one page of memory the frame class uses for custom allocations like QList<> for example.
+
+2^15 = 32.768 bytes
+
+TotalHeapSizeInBytes = (1 << HeapPageShift) * HeapPageCount
+◆ HeapPageCount
+int Quantum.SimulationConfig.HeapPageCount = 256
+Define the max heap page count for memory the frame class uses for custom allocations like QList<> for example.
+
+TotalHeapSizeInBytes = (1 << HeapPageShift) * HeapPageCount
+◆ HeapExtraCount
+int Quantum.SimulationConfig.HeapExtraCount = 0
+Sets extra heaps to allocate for a session in case you need to create 'auxiliary' frames than actually required for the simulation itself
+
+◆ ThreadCount
+int Quantum.SimulationConfig.ThreadCount = 2
+Override the number of threads used internally.
+
+◆ ChecksumSnapshotHistoryLengthSeconds
+FP Quantum.SimulationConfig.ChecksumSnapshotHistoryLengthSeconds = 3
+How long to store checksumed verified frames. The are used to generate a frame dump in case of a checksum error happening. Not used in Replay and Local mode.

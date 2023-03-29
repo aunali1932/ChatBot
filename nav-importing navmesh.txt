@@ -1,0 +1,102 @@
+Importing A Unity Navmesh
+Setup your Unity scene it generate a Unity Navmesh using either the global Navmesh Baker or the Navmesh Building Components (Navmesh Surfaces)
+Create a new GameObject under the map (Quantum MapData script) and add a MapNavMeshUnity script to it. The name of the GameObject will later be the name of the Quantum navmesh.
+Create Navmesh Script
+Adding the MapNavMeshUnity script to import a Unity navmesh
+Select the map and toggle the Bake All Mode to Everything and press Bake All and check the log for errors. We expect a log message similar to:
+Imported Unity NavMesh 'Navmesh', cleaned up 1211 vertices, found 7 region(s), found 4 link(s)
+Map Baking
+Baking the map will import and bake the navmeshes
+The Quantum navmesh will show up..
+..under the Quantum map asset NavMeshLinks
+..inside your project view next to the map asset file (one Quantum asset file and one binary .bytes file)
+Navmesh Project View
+The Quantum navmesh files will show up in the project view
+To visualize the baked Quantum navmesh add the MapNavMeshDebugDrawer to the navmesh GameObject and link the .bytes file under BinaryAsset.
+Navmesh Gizmos
+Navmesh gizmos are rendered into the non-running scene using the MapNavMeshDebugDrawer script
+To visualize the navmesh during play mode select Draw Nav Mesh in QuantumEditorSettings
+All MapNavMeshUnity scripts under the map will be evaluated during map baking. But because the global Unity navmesh baking only produces one navmesh adding multiple navmeshes to the map only makes sense:
+
+When you are using the surface addon to control multiple navmesh surfaces
+When you are drawing the navmeshes manually: use MapNavMeshDefinition instead of MapNavMeshUnity (see Quantum V1 documentation)
+Or when you are creating your custom baking logic that enables and disables parts of the map during multiple Unity navmesh baking iterations
+Optionally the navmesh baking can be forced to automatically run on every scene saving, playmode change or build event. See Editor Features in QuantumEditorSettings.
+
+Navmesh Auto Baking
+Quantum supports navmeshes being only located in the origin. We encourage that the gameplay takes place close to the origin with reasonable extends because of the precision of the fixed point arithmetic.
+
+Back To Top
+ 
+
+Import Settings
+Weld Identical Vertices	The Unity NavMesh is a collection of non-connected triangles. This option is very important and combines shared vertices.
+Weld Vertex Epsilon	Don't make the epsilon too small, vertices required to fuse can be missed, also don't make the value too big as it will deform your navmesh.
+Delaunay Triangulation	This option will post processes the imported Unity navmesh with a Delaunay triangulation to produce more evenly distributed triangles (it reorders long triangles).
+Delaunay Triangulation Restrict To Planes	On 3D navmeshes the Delaunay triangulation can deform the navmesh on slopes while rearranging the triangles. This behaviour is also noticeable on Unitys navmesh and can affect a game when the navmesh height is used for gameplay (e.g. walking on the Navmesh). Check this option to restrict the triangulation to triangles that lie in the same plane.
+Fix Triangles On Edges	Imported vertices are sometimes lying on other triangle edges, which leads to unwanted border detection. With this option such triangles are split.
+Closest Triangle Calculation	Areas in the map grid without a navmesh will need to detect nearest neighbors. This computation is very slow. The SpiralOut option will be much faster but fallback triangles can be null.
+Closest Triangle Calculation Depth	Number of cells to search triangles into each direction when using SpiralOut.
+Enable Quantum_XY	Only visible when the QUANTUM_XY define is set. Toggle this on and the navmesh baking will flip Y and Z to support navmeshes generated in the XY plane.
+Min Agent Radius	The minimum agent radius supported by the navmesh. This value is the margin between the navmesh and a visual border. The value is overwritten by retrieving it from Unity navmesh bake settings (or the surface settings) when baking in the Editor.
+Back To Top
+ 
+
+Using Navmesh Surfaces
+Using the Unity navmesh surface addon has benefits:
+
+Runtime navmesh computation is possible (be aware that this is cannot be done deterministically across clients, the generated navmesh binary data must be send around)
+Creating multiple navmeshes is easy
+Using the NavMeshModifier script helps to mitigate the Unity navmesh island issue (see Quantum FAQ)
+More control over internal settings
+You can link multiple surfaces to a Quantum navmesh by adding them to the NavMeshSurfaces list. During the map baking of one navmesh other surfaces in the scene will be temporarily deactivated.
+
+Navmesh Surfaces
+Quantum supports the Unity Navmesh Surface Addon
+Back To Top
+ 
+
+Custom Baking Options
+MapNavMeshBaker.BakeNavMesh() is the essential Quantum navmesh baking method and it uses the MapNavMesh.BakeData as input data. In the default configuration the bake data is generated from the imported Unity navmesh triangulation. In a custom setup you can fill that data structure by yourself. It is basically only a triangle soup.
+
+You can customize the navmesh baking in different ways.
+
+Adding static code to the baking pipeline by deriving from MapDataBakerCallback:
+Implement OnCollectNavMeshBakeData to modify existing or inject new MapNavMesh.BakeData into the pipeline.
+Implement OnCollectNavMeshes to modify existing or add new NavMesh objects to be serialized.
+Implement OnBeforeBakeNavMesh or OnBakeNavMesh to completely customized the baking or perform pre or post processing.
+public abstract class MapDataBakerCallback {
+  /// <summary>
+  /// Is called before any navmeshes are generated or any bake data is collected.
+  /// </summary>
+  public virtual void OnBeforeBakeNavMesh(MapData data) { }
+
+  /// <summary>
+  /// Is called during navmesh baking with the current list of bake data retreived from Unity navmeshes flagged for Quantum navmesh baking.
+  /// Add new BakeData objects to the navMeshBakeData list.
+  /// </summary>
+  /// <param name="navMeshBakeData">Current list of bake data to be baked</param>
+  public virtual void OnCollectNavMeshBakeData(MapData data, List<MapNavMesh.BakeData> navMeshBakeData) { }
+
+  /// <summary>
+  /// Is called after navmesh baking before serializing them to assets.
+  /// Add new NavMesh objects the navmeshes list.
+  /// </summary>
+  /// <param name="navmeshes">Current list of baked navmeshes to be saved to assets.</param>
+  public virtual void OnCollectNavMeshes(MapData data, List<Quantum.NavMesh> navmeshes) { }
+
+  /// <summary>
+  /// Is called after the navmesh generation has been completed.
+  /// Navmeshes assets references are stored in data.Asset.Settings.NavMeshLinks.
+  /// </summary>
+  public virtual void OnBakeNavMesh(MapData data) { }
+}
+The methods in MapDataBakerCallback are called by reflection during the map baking process. Just fill out the methods in a public class outside any assembly definition. No need to instantiate a GameObject. For more information on the map asset baking pipeline, please refer to the Asset page in the manual.
+
+Back To Top
+ 
+
+Visualizing Pathfinding
+Activate the Pathfinder Gizmo Draw Pathfinder Funnel on QuantumEditorSettings to see the paths gizmos in the scene view
+
+Set the Thread Count to 1 in SimulationConfig to make the gizmos work every time because from Unity we only have access to the main thread.

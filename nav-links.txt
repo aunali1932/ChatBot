@@ -1,0 +1,40 @@
+Creating Navmesh Links
+Create a Unity Off Mesh Link. Quantum ignores the Activated, Auto Update Positions and Navigation Area properties.
+Off Mesh Link Setup
+Bake the map and check the resulting link using the MapNavMeshDebugDrawer script. The links are rendered as blue arrows.
+Off Mesh Link Debug
+The agent now already automatically uses the navmesh link during its path-finding.
+Off Mesh Link Path Gizmo
+Back To Top
+ 
+
+Toggle Navmesh Links
+Links can be toggled on and off and restrict what agents can use them by using Quantum navmesh regions. Attach a MapNavMeshRegion script to the Off Mesh Link set the Id and Cast Region to No Region.
+
+Off Mesh Link Regions
+Back To Top
+ 
+
+Hooking-In Gameplay
+With no alteration the agent will traverse the link with its normal speed. You can take over control of the agent when the link has been reached by listening to the ISignalOnNavMeshWaypointReached signal. Then either disable the agent until your animation has completed or override the movement code in the ISignalOnNavMeshMoveAgent signal (this requires a change of the navmesh config to toggle the MovementType to Callback).
+
+This code sample performs a teleport when stepping on the link start waypoint.
+
+public void OnNavMeshWaypointReached(Frame f, EntityRef entity, FPVector2 waypoint, Navigation.WaypointFlag waypointFlags, ref bool resetAgent) {
+    var agent = f.Get<NavMeshPathfinder>(entity);
+    var waypointIndex = agent.WaypointIndex;
+    // btw HasFlag() is convenient but slow
+    if ((waypointFlags & Navigation.WaypointFlag.LinkStart) == Navigation.WaypointFlag.LinkStart) {
+        // we can be pretty sure that there always is a next waypoint for a link start
+        var linkDestination = agent.GetWaypoint(f, waypointIndex + 1);
+        f.Unsafe.GetPointer<Transform2D>(entity)->Position = linkDestination;
+    }
+}
+Back To Top
+ 
+
+Link Traversing Exception
+Query if an agent is currently traversing a link by using NavMeshPathfinder.IsOnLink(FrameBase).
+When setting a new target while the agent is traversing a link the agent will finish the current link before executing the path-finding. This is done by setting the WaypointFlag.RepathWhenReached.
+If the waypoint before the last waypoint is a LinkStart a re-path is triggered. This helps to prematurely mitigate problems with running a re-path when the link start waypoint has already been reached.
+No automatic re-pathing (NavMeshAgentConfig.MaxRepathTimeout) will be executed as long as the agent is traversing a link..

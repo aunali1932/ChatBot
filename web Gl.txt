@@ -1,0 +1,27 @@
+WebGL
+Quantum supports multiple platforms, including WebGL, which comes with its unique challenges that developers must be aware of when working with it. This page provides a comprehensive list of these considerations.
+
+
+Unity Versions
+For optimal performance with WebGL, it is recommended to use Unity versions 2021.2.8f1 or later. Older versions of Unity may result in decreased performance when running in WebGL. The minimum acceptable version for building with WebGL is 2018.4.30f1.
+
+Quantum WebGL is supported since Quantum version 2.1 Build 967.
+
+Back To Top
+ 
+
+WebGL Performance
+WebGL is a unique environment that presents certain limitations. In general, performance is expected to be lower compared to other platforms. Hence, it is crucial to test the performance of your application in WebGL builds and not just within the editor to ensure optimal performance.
+
+When the runInBackground option is disabled in the Player Settings, the application will stop running when the player switches to another tab. If the tab remains inactive for an extended period, the client will disconnect and will require reestablishing the connection once the tab is brought back into focus.
+
+Given the low performance of WebGL, it is recommended to build both the Quantum code project in Release mode and set Unity to IL2CPP. Debug builds of the quantum code project can be extremely slow on WebGL.
+
+Unity WebGL builds do not support multithreading. The simulation is automatically confined to the main thread in WebGL and the ThreadCount setting in the SimulationConfig is disregarded.
+WebSockets
+Browsers cannot establish direct UDP connections, so WebSockets over TCP are utilized instead. However, TCP's reliable and sequenced transfer protocol can negatively impact gameplay for players with poor network connections. To provide the best player experience, it is recommended to also offer the game as a download.
+
+A warning that the application is switching to WebSockets may appear in the browser, but this can be safely ignored.
+
+Stack Traces
+To enhance WebGL performance in release builds you can turn off the stack trace of logs in Unity. Go to edit > project settings > Player > Other Settings and scroll all the way down to Stack Trace* Set the stack trace of Warning and Log to None

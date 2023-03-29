@@ -1,0 +1,124 @@
+Cheat Protection
+Introduction
+Cheat Protection By Determinism
+Trustable Match Results
+How To Access The Replay Data
+Self-Hosted Spectators Referee
+Custom Quantum Server
+Protect Client-Controlled Game Configs
+Custom Authentication
+Determinism As A Drawback
+Perfect Information Problem
+Detecting Cheaters Using Checksums
+
+Introduction
+Security and cheat-protection are important aspects of online multiplayer games. Quantum's determinism offers unique features to address them. This page dives into the details on the built-in protection and offers best-practices to create production-ready online games with Photon Quantum.
+
+It is crucial for developers to be aware of all security related issues and the steps to mitigated those as well as at which time these should be taken. Although it is possible to run the full simulation on the server, it extremely rare this is sensible from a practical and cost perspective.
+
+Running servers is costly especially when the game does not generate revenue, yet.
+In a most cases cheaters only make up a very small portion of the user base.
+Making a game 100% cheat proof is an utopian idea, even keeping just one step ahead of them is a huge task.
+There are game genres which rely on as much security as possible.
+The single most important advice is: write the game now and add these more complex safety checks incrementally. It is perfectly viable to go live without a custom server and be successful.
+In the documentation the following terms are used:
+
+a game backend refers to online services created and hosted by the customer;
+a custom server (/plugin) refers to a customer-customized Quantum plugin hosted by Photon; and,
+Quantum Public Cloud refers to non-customized Quantum servers hosted by Photon.
+Back To Top
+ 
+
+Cheat Protection By Determinism
+The huge upside of a deterministic game, even without the server running the simulation, is its cheat-robustness; if one player modifies their client, for example by changing their character's speed, it will not affect any other player. They might notice the cheating player behaving strangely (e.g. continuously bumping into a wall) but otherwise their experience remains untainted.
+
+The reason for this is simple: each client deterministically runs the complete simulation locally and only shares input with other clients.
+
+Back To Top
+ 
+
+Trustable Match Results
+A match result is used to update the player progression in a game backend. In the most secure scenarios this is done from the server where the game logic ran.
+
+However, there are a few iterations possible to secure the results in a cost-efficient way before going towards an authoritative game server.
+
+Prototyping	Clients push their individual results to the developers game backend. This is good for prototyping and games can also launch with this setup. Having a data structure which can be filled with the results to be sent to a backend is the first thing to have.
+Majority Vote	Clients push the match result individually but the backend choses the result based on a majority vote. Outliers that send (potentially) tampered data can be identified. There is no need to wait for a confirmation on the clients, just display them their result right away and save the progression only _after_ having had it validated on the backend.
+Resimulation Replays	If there is no agreement via the majority vote or a statistical evaluation smell, flag the match for a revalidation and collect the input history of the players. With the input history, the config files and the asset database the Quantum simulation can run outside Unity to recheck the result (replay). See the quantum-console-runner project in the Quantum SDK and read the following section on how to access the replay data.
+Self-Hosted Spectators Referee	Use a referee spectator, a .Net application, which can connect to live matches and run the simulation simultaneously, then submit the final results from it rather than letting the players send it.
+Custom Quantum Server	Run the simulation on the server and submit its result (see the quantum-custom-plugin SDK).
+Back To Top
+ 
+
+How To Access The Replay Data
+Quantum 2.1 and earlier
+
+Request to be send by a client
+Send from the Self-Hosted Spectators Referee
+Send from the Custom Quantum Server
+Quantum 3.0. (planned)
+
+Configurable webhook for Quantum Public Cloud users to stream the verified input history to another backend
+Back To Top
+ 
+
+Self-Hosted Spectators Referee
+The Quantum simulation can be joined as a spectator; a spectator is a client which can connect to the server and run the full game without the ability of sending input. This can be used to start and initialize the game from a trusted source.
+
+Create a spectator application (runs outside Unity).
+Run it anywhere to communicate securely with the game backend to start and prepare a Photon room.
+Start a Quantum game.
+Let other clients late-join the simulation (see the quantum-console-spectator project in the Quantum SDK).
+Adding another, artificial client to the Photon Room for spectating purposes will increase the CCU count, which is the basis for the server cost. This might be a problem for games with low player counts (1vs1) as increases the CCU count perceptibly.
+Back To Top
+ 
+
+Custom Quantum Server
+Running custom code on the Quantum server requires renting Photon Enterprise servers. It will enable authority over the following aspects:
+
+Option to run the game simulation on the server to:
+Have a trusting source for game results
+Enable server snapshots (are send by clients when using the Public Quantum Cloud)
+Option to inject server controlled secrets into the game (server command)
+Option to intercept and replace DeterministicConfig, RuntimeConfig and RuntimePlayer
+Option to save validated replays
+Back To Top
+ 
+
+Protect Client-Controlled Game Configs
+Two important shared configuration files are sent by the clients in the beginning of a match: DeterministicConfig (Quantum settings) and RuntimeConfig (game settings). The server will accept the first ones (DeterministicConfig, RuntimeConfig) it receives which is more or less random in the most cases.
+
+Clients also sending another config which is describing the player loadout: RuntimePlayer. To verify it against the player progression saved on a backend a custom Quantum server plugin is required.
+
+Public Quantum Cloud	Chooses a random source for DeterministicConfig and RuntimeConfig
+Custom Quantum Server	All configs can be intercepted and replaced after retrieving it from the developers backend
+Dashboard (coming in Quantum 3.0)	DeterministicConfig can be forced on Public Cloud server by associating it with an AppId inside the Photon dashboard.
+Webhooks (coming in Quantum 3.0)	RuntimeConfig and RuntimePlayer can be verified by the developers backend calling a webrequest configured on the Photon dashboard.
+Back To Top
+ 
+
+Custom Authentication
+We do not offer an authentication service nor a player database ourselves but we absolutely recommend to add a proprietary or third-party authentication service.
+
+photon realtime custom authentication
+
+Back To Top
+ 
+
+Determinism As A Drawback
+While Determinism has a lot of advantages, it comes with a few notable drawbacks inherent to this type of technology.
+
+
+Perfect Information Problem
+With Quantum every client has access to all information required to simulation the game locally (apart from other players' input). This means client controlled secrets used in a card game and Fog Of War-like features are easily hackable.
+
+There are also fringe cases which let clients "guess" a next random number or the ability to create bots.
+
+Back To Top
+ 
+
+Detecting Cheaters Using Checksums
+It is not recommended to use Quantum checksum detection for live games as a way to detect cheaters.
+
+Checksum calculation is expensive and could lead to hiccups; and,
+The build-in mechanism stops the simulation for every client in the game session immediately.

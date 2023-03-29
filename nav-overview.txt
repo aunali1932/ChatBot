@@ -1,0 +1,22 @@
+The Quantum navigation system provides a deterministic Navigation Mesh and a set of Navigation Agent components to navigate and steer entities through the game world.
+
+N.B.: Core.NavigationSystem() needs to be enabled in SystemSetup.cs for the navigation related functionalities to work.
+
+More information on the API is available in the documentation included in the SDK docs\PhotonQuantum-Documentation.chm.
+
+Importing A Unity Navmesh
+Creating Navmesh Agents
+Agent Avoidance
+Using Navmesh Regions
+Using Navmesh Off Mesh Links
+Custom Navmesh Generation
+
+Features
+A* path-finding algorithm
+Autonomous agents navigate to target destination through the navmesh
+Parts of the navmesh can be toggled on and off during run-time (regions)
+HRVO agent avoidance
+Dynamic avoidance obstacles (not navmesh carving)
+Off-mesh links
+3D Navigation supported (since Quantum 2.1)
+Region triangle weights (since Quantum 2.1)

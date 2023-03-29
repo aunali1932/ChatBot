@@ -1,0 +1,165 @@
+Photon.Deterministic.DeterministicSessionConfig Class Reference
+Parameterize internals of the Deterministic simulation and plugin (the Quantum server component). More...
+
+Public Attributes
+Boolean 	AggressiveSendMode = false
+ 	If the server should skip buffering and perform aggressive input sends, only suitable for games with less or equal 4 players. More...
+ 
+Boolean 	ChecksumCrossPlatformDeterminism = false
+ 	If Quantum should skip performing rollbacks and re-predict when it's not needed to retain determinism. Not used in lockstep mode. Mutually exclusive with the _BW_COMPAT_ExposeVerifiedStatusInsideSimulation setting. More...
+ 
+Int32 	ChecksumInterval = 60
+ 	How often we should send checksums of the frame state to the server for verification (useful during development, set to zero for release). Defined in frames. More...
+ 
+Int32 	InputDelayMax = 60
+ 	The maximum input offset a player can have. More...
+ 
+Int32 	InputDelayMin = 0
+ 	The minimum input offset a player can have. More...
+ 
+Int32 	InputDelayPingStart = 100
+ 	At what ping value that Quantum starts applying input offset. Defined in milliseconds. More...
+ 
+Int32 	InputFixedSize
+ 	Fixed input size. More...
+ 
+Boolean 	InputFixedSizeEnabled
+ 	If the input data has a fixed byte length, enabling this saves bandwidth. More...
+ 
+Int32 	InputHardTolerance = 8
+ 	How many frames the server will wait until it expires a frame and replaces all non-received inputs with repeated inputs or null's and sends it out to all players. More...
+ 
+Int32 	InputRedundancy = 3
+ 	How much staggering the Quantum client should apply to redundant input resends. 1 = Wait one frame, 2 = Wait two frames, etc. More...
+ 
+Int32 	InputRepeatMaxDistance = 10
+ 	How many frames Quantum will scan for repeatable inputs. 5 = Scan five frames forward and backwards, 10 = Scan ten frames, etc. More...
+ 
+Boolean 	LockstepSimulation = false
+ 	Runs the quantum simulation in lockstep mode, where no rollbacks are performed. s recommended to set input InputDelayMin to at least 10 and _BW_COMPAT_InputPacking to 1. More...
+ 
+Int32 	MinOffsetCorrectionDiff = 1
+ 	How many frames the current local input delay must diff to the current requested offset for Quantum to update the local input offset. Defined in frames. More...
+ 
+Int32 	MinTimeCorrectionFrames = 1
+ 	How much the local client time must differ with the server time when a time correction package is received for the client to adjust it's local clock. Defined in frames. More...
+ 
+Int32 	PlayerCount
+ 	Player count the simulation is initialized for. More...
+ 
+Int32 	RollbackWindow = 60
+ 	How many frames are kept in the local ring buffer on each client. Controls how much Quantum can predict into the future. Not used in lockstep mode. More...
+ 
+Int32 	SessionStartTimeout = 1
+ 	How long the Quantum server will wait for the room to become full until it forces a start of the Quantum session. Defined in seconds. More...
+ 
+Int32 	TimeCorrectionRate = 4
+ 	How many times per second the server will send out time correction packages to make sure every clients time is synchronized. More...
+ 
+Int32 	TimeScaleMin = 100
+ 	The smallest timescale that can be applied by the server. Defined in percent. More...
+ 
+Int32 	TimeScalePingMax = 300
+ 	The ping value that the server will reach the 'Time Scale Minimum' value at, i.e. be at its slowest setting. Defined in milliseconds. More...
+ 
+Int32 	TimeScalePingMin = 100
+ 	The ping value that the server will start lowering the time scale towards 'Time Scale Minimum'. Defined in milliseconds. More...
+ 
+Int32 	UpdateFPS = 60
+ 	How many ticks per second Quantum should execute. More...
+ 
+Detailed Description
+Parameterize internals of the Deterministic simulation and plugin (the Quantum server component).
+
+This config file will be synchronized between all clients of one session. Though each player starts its own simulation locally with his own version of the DeterministicConfig the server will distribute the config file instance of the first player that joined the plugin.
+
+Member Data Documentation
+◆ PlayerCount
+Int32 Photon.Deterministic.DeterministicSessionConfig.PlayerCount
+Player count the simulation is initialized for.
+
+◆ ChecksumCrossPlatformDeterminism
+Boolean Photon.Deterministic.DeterministicSessionConfig.ChecksumCrossPlatformDeterminism = false
+If Quantum should skip performing rollbacks and re-predict when it's not needed to retain determinism. Not used in lockstep mode. Mutually exclusive with the _BW_COMPAT_ExposeVerifiedStatusInsideSimulation setting.
+
+This allows Quantum frame checksumming to be deterministic across different runtime platforms, however it comes with quite a cost and should only be used during debugging.
+
+◆ LockstepSimulation
+Boolean Photon.Deterministic.DeterministicSessionConfig.LockstepSimulation = false
+Runs the quantum simulation in lockstep mode, where no rollbacks are performed. s recommended to set input InputDelayMin to at least 10 and _BW_COMPAT_InputPacking to 1.
+
+◆ AggressiveSendMode
+Boolean Photon.Deterministic.DeterministicSessionConfig.AggressiveSendMode = false
+If the server should skip buffering and perform aggressive input sends, only suitable for games with less or equal 4 players.
+
+◆ UpdateFPS
+Int32 Photon.Deterministic.DeterministicSessionConfig.UpdateFPS = 60
+How many ticks per second Quantum should execute.
+
+◆ ChecksumInterval
+Int32 Photon.Deterministic.DeterministicSessionConfig.ChecksumInterval = 60
+How often we should send checksums of the frame state to the server for verification (useful during development, set to zero for release). Defined in frames.
+
+◆ RollbackWindow
+Int32 Photon.Deterministic.DeterministicSessionConfig.RollbackWindow = 60
+How many frames are kept in the local ring buffer on each client. Controls how much Quantum can predict into the future. Not used in lockstep mode.
+
+◆ InputHardTolerance
+Int32 Photon.Deterministic.DeterministicSessionConfig.InputHardTolerance = 8
+How many frames the server will wait until it expires a frame and replaces all non-received inputs with repeated inputs or null's and sends it out to all players.
+
+◆ InputRedundancy
+Int32 Photon.Deterministic.DeterministicSessionConfig.InputRedundancy = 3
+How much staggering the Quantum client should apply to redundant input resends. 1 = Wait one frame, 2 = Wait two frames, etc.
+
+◆ InputRepeatMaxDistance
+Int32 Photon.Deterministic.DeterministicSessionConfig.InputRepeatMaxDistance = 10
+How many frames Quantum will scan for repeatable inputs. 5 = Scan five frames forward and backwards, 10 = Scan ten frames, etc.
+
+◆ SessionStartTimeout
+Int32 Photon.Deterministic.DeterministicSessionConfig.SessionStartTimeout = 1
+How long the Quantum server will wait for the room to become full until it forces a start of the Quantum session. Defined in seconds.
+
+◆ TimeCorrectionRate
+Int32 Photon.Deterministic.DeterministicSessionConfig.TimeCorrectionRate = 4
+How many times per second the server will send out time correction packages to make sure every clients time is synchronized.
+
+◆ MinTimeCorrectionFrames
+Int32 Photon.Deterministic.DeterministicSessionConfig.MinTimeCorrectionFrames = 1
+How much the local client time must differ with the server time when a time correction package is received for the client to adjust it's local clock. Defined in frames.
+
+◆ MinOffsetCorrectionDiff
+Int32 Photon.Deterministic.DeterministicSessionConfig.MinOffsetCorrectionDiff = 1
+How many frames the current local input delay must diff to the current requested offset for Quantum to update the local input offset. Defined in frames.
+
+◆ TimeScaleMin
+Int32 Photon.Deterministic.DeterministicSessionConfig.TimeScaleMin = 100
+The smallest timescale that can be applied by the server. Defined in percent.
+
+◆ TimeScalePingMin
+Int32 Photon.Deterministic.DeterministicSessionConfig.TimeScalePingMin = 100
+The ping value that the server will start lowering the time scale towards 'Time Scale Minimum'. Defined in milliseconds.
+
+◆ TimeScalePingMax
+Int32 Photon.Deterministic.DeterministicSessionConfig.TimeScalePingMax = 300
+The ping value that the server will reach the 'Time Scale Minimum' value at, i.e. be at its slowest setting. Defined in milliseconds.
+
+◆ InputDelayMin
+Int32 Photon.Deterministic.DeterministicSessionConfig.InputDelayMin = 0
+The minimum input offset a player can have.
+
+◆ InputDelayMax
+Int32 Photon.Deterministic.DeterministicSessionConfig.InputDelayMax = 60
+The maximum input offset a player can have.
+
+◆ InputDelayPingStart
+Int32 Photon.Deterministic.DeterministicSessionConfig.InputDelayPingStart = 100
+At what ping value that Quantum starts applying input offset. Defined in milliseconds.
+
+◆ InputFixedSizeEnabled
+Boolean Photon.Deterministic.DeterministicSessionConfig.InputFixedSizeEnabled
+If the input data has a fixed byte length, enabling this saves bandwidth.
+
+◆ InputFixedSize
+Int32 Photon.Deterministic.DeterministicSessionConfig.InputFixedSize
+Fixed input size.

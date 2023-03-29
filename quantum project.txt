@@ -1,0 +1,300 @@
+Introduction
+A collection of background information, tutorials and best-practices to customize the integration of the Quantum SDK into specialized workflows.
+
+Back To Top
+ 
+
+Release And Debug Builds
+The Quantum project outputs its dll and references directly into the Unity project (by default QuantumSDK\quantum_unity\Assets\Photon\Quantum\Assemblies\). Depending on the build configuration selected in Visual Studio (or Rider) the dlls from QuantumSDK\assemblies\debug or \release are referenced and copied.
+
+To switch from a debug to a release build, rebuild the quantum solution with the desired configuration.
+
+Build Configuration
+Toggle Build Configuration In Visual Studio
+Rebuild
+Rebuild The Quantum Solution In Visual Studio
+The debug build will make it possible to debug the quantum.code.csproj and place breakpoints. After rebuilding the solution, attach Visual Studio (or Rider) to the running Unity Editor.
+
+The debug build has significant performance penalties compared to a release build. For performance tests always use a Quantum release build (and Unity IL2CPP). Read more about this in the profiling section.
+
+The debug build contains assertions, exceptions, checks and debug outputs that help during development and which are disabled in release configuration. For example:
+
+Log.Debug() and Log.Trace(), for example called from the quantum code project, will not be outputting log anymore.
+As well as all Draw.Circle() methods.
+NavMeshAgentConfig.ShowDebugAvoidance and ShowDebugSteering will not draw gizmos anymore.
+Assertions and exceptions inside low level systems like physics are disabled.
+Back To Top
+ 
+
+Quantum-Unity Code Integration
+A guide to demonstrate how to import and keep the Quantum simulation code in Unity.
+
+Note: The procedure requires Unity 2019.4 and up.
+
+The default way of working with Quantum is to have the simulation code (quantum_code) completely separate from Unity (quantum_unity). The double solution approach is not to everyone's liking, so with Quantum v2 we introduced an option to include quantum_code projects in the solution Unity generates with QuantumEditorSettings.MergeWithVisualStudioSolution setting. However, there are still use cases where having simulation code inside of Unity may be desirable. For instance, it lets users modify and rebuild simulation code without a license for Visual Studio or Rider.
+
+You can convert your project to use this approach.
+
+IMPORTANT: This is a one-way conversion.
+
+Any files that you add/remove in Unity will not be added to/removed from quantum_code/quantum.code/quantum.code.csproj. This is not a problem if do not intend to use the project; if you plan on using the console runners and/or server plug-ins, you will have to update the project manually yourself.
+
+Back To Top
+ 
+
+Integration Steps
+Delete quantum_unity/Assets/Photon/Quantum/Assemblies/quantum.code.dll
+Copy tools/codeintegration_unity/QuantumCodeIntegration and tools/codeintegration_unity/QuantumCode to quantum_unity/Assets/Photon
+Copy everything (except for bin, obj and Properties directories) from quantum_code/quantum.code to quantum_unity/Assets/Photon/QuantumCode
+If you get compile errors due to generated code being missing after opening the Unity project, run the codegen via the Quantum/Code Integration/Run All CodeGen menu.
+
+Back To Top
+ 
+
+Gotchas
+PhotonQuantumCode.asmdef explicitly removes Unity assemblies references. This is to ensure the nondeterministic Unity code is not mixed with the simulation code; this ensures there's always a way back to quantum_code as a standalone project.
+N.B.: Any issues arising from including Unity assemblies will not receive any support.
+
+If for whatever the reason you happen to run into a "chicken and egg" problem (cannot compile because codegen is out of date, cannot run codegen because there are compile errors) and there is no Quantum/Code Integration menu, you can always run the codegen manually via the console (on non-Windows platforms prefix these with mono):
+tools/codegen/quantum.codegen.host.exe quantum_unity/Assets/Photon/QuantumCode
+
+tools/codegen_unity/quantum.codegen.unity.host.exe quantum_unity/Library/ScriptAssemblies/PhotonQuantumCode.dll quantum_unity/Assets
+
+Back To Top
+ 
+
+Quantum DSL Integration
+This section is about how to integrate the Quantum DSL files and their compilation into a workflow.
+
+
+Qtn File Discovery
+The qtn-files will be compiled as a pre build step of the quantum_code.csproj by calling tools\codegen\quantum.codegen.host.exe as a pre build step with either a cs-proj file or a folder as paramter. There are two ways we recommend to set up the codegen:
+
+1. (DEFAULT) Add the qtn-files explicitly to quantum_code.csproj:
+
+<ItemGroup>
+  <None Include="Foo\bar.qtn" />
+  <None Include="Oof\rab.qtn" />
+</ItemGroup>
+The PreBuildEvent looks like this:
+
+# win
+"$(ProjectDir)..\..\tools\codegen\quantum.codegen.host.exe" "$(ProjectPath)"
+# mac
+mono "$(ProjectDir)..\..\tools\codegen\quantum.codegen.host.exe" "$(ProjectPath)"
+2. If tools\codegen\quantum.codegen.host.exe is called with a folder instead of a file it will search for every qtn-file inside the given folder.
+
+Change the PreBuildEvent of quantum_code.csproj to this:
+
+# win
+"$(ProjectDir)..\..\tools\codegen\quantum.codegen.host.exe" "$(ProjectDir)"
+# mac
+mono "$(ProjectDir)..\..\tools\codegen\quantum.codegen.host.exe" "$(ProjectDir)"
+Back To Top
+ 
+
+Qtn File Syntax Highlighting
+To enable syntax highlighting in QTN files, follow the guide for your respective IDE.
+
+
+Visual Studio
+In Visual Studio, you can add syntax highlighting for QTN files by associating it with another type (e.g. C# or Microsoft Visual C++). To do this go to Tools -> Options -> Text Editor -> File Extension.
+
+Back To Top
+ 
+
+JetBrains Rider
+In JetBrains Rider, you can add syntax highlighting to QTN file by defining a new file type.
+
+Step 1: Navigate to File->Settings->Editor->File Types.
+File Types
+The `File Types` settings in JetBrains Rider.
+Step 2: In the Recognized File Types category, press the + sign at the right of the to add a new file type.
+New File Type
+The `New File Type` window in JetBrains Rider.
+Step 3: Check the settings for line comments, block comments, etc...
+Step 4: Paste the list into the keywords level 1 (see below).
+#define
+#pragma
+abstract
+any
+array
+asset
+asset_ref
+bitset
+button
+byte
+collision
+component
+dictionary
+entity
+entity_ref
+enum
+event
+fields
+filter
+flags
+global
+has
+import
+input
+int
+list
+local
+long
+not
+player_ref
+remote
+sbyte
+set
+short
+signal
+struct
+synced
+uint
+ulong
+union
+use
+ushort
+using
+Step 5: Paste the list into the keywords level 2 (see below).
+(
+)
+*
+:
+;
+<
+=
+>
+?
+[
+]
+{
+}
+Step 6: In the File Name Patterns category, press the + sign at the right.
+Step 7: Enter *.qtn as the wildcard for the type.
+DSL Syntax Highlighting
+DSL Syntax Highlighting in .QTN files (JetBrains Rider).
+Back To Top
+ 
+
+Quantum Code Generation Tools
+Quantum uses two code generation tools that are required to run before and after the quantum.code.dll compilation.
+
+Before compilation: Quantum Codegen (CodeGen.cs)
+
+After compilation: Quantum Unity Codegen (Unity scripts)
+
+Back To Top
+ 
+
+Quantum Codegen
+Executes the Quantum DSL code generation by converting found qtn files to C# code (Core/CodeGen.cs). Has two modes, one selects all qtn files recursively while the other only checks explicitly names qtn files in the csproj file.
+
+Location	tools\codegen\quantum.codegen.host.exe
+Platform	Windows, Mono
+Usage	quantum.codegen.host.exe project-folder|project-file
+project-folder	The path to the folder that the quantum.code.csproj is located. This mode will select all qtn files found recursively in the provided folder.
+project-file	The path of the quantum.code.csproj file. This mode will select all qtn files that are explicitly listed as items:
+<ItemGroup>
+    <None Include="Example\Example.qtn"/>
+</ItemGroup>
+Back To Top
+ 
+
+Quantum Unity Codegen
+Runs the Quantum codegen part that generates the Unity asset scripts (AssetBase), editors, prototype classes and the AOT file, which includes necessary class and generic declarations for AOT compilers.
+
+Location	tools\codegen_unity\quantum.codegen.unity.host.exe
+Platform	Windows, Mono
+Usage	quantum.codegen.unity.host.exe AssemblyPath OutputDir
+AssemblyPath	Path to quantum.code.dll file.
+OutputDir	Output folder for Unity scripts. Usually quantum_unity\Assets. See default paths and how to customize them below.
+Back To Top
+ 
+
+Overwrite Asset Script Location And Disable AOT File Generation
+Create the file tools\codegen_unity\quantum.codegen.unity.dll.config.
+
+Caveat: The file will be overwritten during the default upgrade procedure.
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <appSettings>
+    <add key="RelativeLinkDrawerFilePath" value="Quantum/Editor/PropertyDrawers/Generated/AssetLinkDrawers.cs"/>
+    <add key="RelativeAssetScriptFolderPath" value="Quantum/AssetTypes/Generated"/>
+    <add key="RelativeGeneratedFolderPath" value="Quantum/Generated"/>
+    <add key="GenerateAOTFile" value="true"/>
+    <add key="EndOfLineCharacters" value="
+"/>
+  </appSettings>
+</configuration>
+Back To Top
+ 
+
+Quantum Unity Codegen (Netcore)
+This version of the Quantum codegen Unity tool will be able to load a quantum.code.dll compiled with netstandard2.0.
+
+Location	tools\codegen_unity\netcoreapp3.1\quantum.codegen.unity.host.exe
+Platform	Windows, Linux
+Usage	quantum.codegen.unity.host.exe --additional-deps AdditionalDepsDir
+AssemblyPath	Path to quantum.code.dll file.
+OutputDir	Output folder for Unity scripts. Usually quantum_unity\Assets. See default paths and how to customize them below.
+AdditionalDepsDir	Additional dependencies are required to load the quantum dlls which are usually located in assemblies\release.
+Set up as PostBuildEvent from Visual Studio:
+
+<PostBuildEvent Condition="'$(OS)' == 'Windows_NT'">"$(ProjectDir)..\..\tools\codegen_unity\netcoreapp3.1\quantum.codegen.unity.host.exe" "$(TargetDir)\quantum.code.dll" "$(ProjectDir)..\..\quantum_unity\Assets" --additional-deps "$(ProjectDir)..\..\assemblies\$(Configuration)"</PostBuildEvent>
+
+ To Document Top
+
+Hide Sidebar
+Search …
+PRODUCTS
+QUANTUM | v2v1  
+API Reference
+Getting Started
+
+Quantum 100
+
+Game Samples
+
+Technical Samples
+
+AddOns
+
+Manual
+
+Quantum Ecs
+
+Animation
+Assets
+
+Cheat Protection
+Commands
+Configuration Files
+Custom Server Plugin
+
+Entity Prototypes
+Frames
+Game Session
+
+Git Ignore Files
+Input
+Materialization
+Multi-Client Runner
+Navigation
+
+Physics
+
+Player
+
+Prediction Culling
+Profiling
+Quantum Project
+WebGL
+Concepts And Patterns
+
+Consoles
+
+Reference
+
+Languages English , 日本語 , 한국어 , 繁体中文

@@ -1,0 +1,31 @@
+Introduction
+Using 2.5D Physics you are able to add Height, or thickness depending on your perspective, while still benefiting from most performance advantages available in 2D. N.B.: Use Vertical Transform has to be manually enabled in the SimulationConfig asset's Physics settings.
+
+Back To Top
+ 
+
+2.5D Physics With Vertical Data
+StaticCollider2D can have 'thickness' in the 3rd dimension using Quantum's 2.5D physics; simply set the Height:
+
+Adding Height to a Static Collider
+Adding Height to a Static Collider.
+For Entities, just add the Transform2DVertical component and set its Height and Position. On a Quantum XZ-oriented game, this adds height on the Y axis, for example. N.B.: Transform2DVertical requires the Transform2D component.
+
+var transform2dVertical = new Transform2DVertical();
+transform2dVertical.Height = FP._1;
+transform2dVertical.Position = FP._1;
+
+f.Set(entity, transform2dVertical);
+Adding Height to an Entity Prototype
+Adding Height to an Entity Prototype.
+If entities or statics have a 3rd dimension, the physics engine will take into consideration when solving collisions. This allows for 'aerial' entities to fly over 'ground-based' ones, etc.
+
+Back To Top
+ 
+
+Physics Engine Implications
+
+Entity Separation
+Important: When a collision is detected, the collision solver does not use the extra dimension information. This can result in entity bounce when separation is performed on the basic 2D plane of the physics engine.
+
+It is possible to simulate 3-dimensional gravity by manually applying speed and forces directly on Transform2DVertical.Position. The physics engine will use that information only for collision detection though.

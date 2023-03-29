@@ -1,0 +1,60 @@
+Using Navmesh Regions
+While respecting performance considerations for deterministic roll-backs in Quantum navmesh Regions are a compromise to Unitys dynamic navmesh carving. They can be used to dynamically toggle pre-defined areas of the navmesh with very little performance overhead.
+
+Because the regions are encoded as a mask inside the triangles (unsigned long) the maximum number of different region ids per map is 64 (Navigation.Constants.MaxRegions). Reusing the same id for different regions is possible though.
+
+The main Quantum navmesh (Walkable) is not a region and can not be toggled.
+
+
+Creating Navmesh Regions
+Step 1) Quantum Regions piggy-back on the Unity navmesh areas. Create a new area. We chose the name Toggleable in the image below but any name will do.
+
+To make the detection work when you have toggle-able regions right next to each other they will need to use different area ids. Create multiple areas here in that case.
+
+Region Areas
+Step 2) Add the new area(s) to the MapNavMeshUnity otherwise the baking will not know what areas to look for.
+
+Add Region Area
+Step 3) Unity uses the objects MeshRenderer to project the area onto the navmesh. Create a GameObject with a MeshRenderer and attach the MapNavMeshRegion.
+
+Region Setup
+The Id is a unique string that will be accessible from code via the Map.RegionMap from which you can later get the region id (int, flag).
+
+CastRegion must be set to CastRegion. The script is re-used for Off Mesh Links for example that do not require to project regions to the navmesh.
+
+Under NavMeshHelper you can double check if the the GameObject is set up correctly: for example is it set to static and is the selected area is our region area.
+
+When the navmesh surfaces are installed the inspector look slightly different. You need to add a NavMeshModifier script to set the navmesh area for example.
+
+During the region import we try to match the triangles back to the original region script and for this use the bounding box of the mesh. Because the triangles generated are not 100% exact the settings on MapNavMeshUnity have a RegionDetectionMargin settings that adds a bit of room during the fitting. Increase this value if regions are not exported but when it becomes too large there may be problems detecting neighbouring regions.
+
+Btw: The MeshRenderer that generates the regions only has to be active during the baking.. we should add a tool for that..
+
+Step 4) Now bake the map and see the coloured area of triangles in the navmesh where the region was placed.
+
+Active Regions
+Step 5) Toggle the region off in code and watch the agent circumventing it.
+
+public override void OnInit(Frame f) {
+    var regionId = f.Map.RegionMap["foo"];
+    f.NavMeshRegionMask->ToggleRegion(regionId, false);
+}
+Inactive Regions
+Step 6) Region activation is accessible and stored in the frame.
+
+The mask needs to be reset when a new map is loaded. Run FrameBase.ClearAllNavMeshRegions() for example during the ISignalOnMapChanged signal.
+
+public class ResetRegionsSystem : SystemSignalsOnly, ISignalOnMapChanged {
+    public void OnMapChanged(Frame f, AssetRefMap previousMap) {
+        f.ClearAllNavMeshRegions();
+    }
+}
+Checkout the API of NavMeshRegionMask object. Here is a small overview:
+
+NavMeshRegionMask.Default has all regions enabled (set to 1)
+NavMeshRegionMask.ToggleRegion(int region, bool enabled) toggle a region by its region id. The region id is the offset of the bit-shift and can be retrieved by the name using Map.RegionMap dictionary.
+NavMeshRegionMask.IsRegionEnabled(int region) checks if the region is active.
+NavMeshRegionMask.IsSubset(NavMeshRegionMask) can be used to check if all regions active in one mask are also enabled in the other.
+NavMeshRegionMask.Clear() sets all regions to active.
+NavMeshRegionMask.HasValidRegions returns true, when the mask has exactly one valid region set.
+NavMeshRegionMask.IsMainArea checks if the mask is zero which will be true for triangles belonging to the main navmesh area and cannot be toggled off.

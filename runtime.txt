@@ -1,0 +1,81 @@
+Quantum.RuntimeConfig Class Reference
+In contrast to the SimulationConfig, which has only static configuration data, the RuntimeConfig holds information that can be different from game to game. More...
+
+Public Member Functions
+String 	Dump ()
+ 	Dump the content into a human readable form. More...
+ 
+void 	Serialize (BitStream stream)
+ 	Serializing the members to be send to the server plugin and other players. More...
+ 
+Static Public Member Functions
+static RuntimeConfig 	FromByteArray (Byte[] data)
+ 	Deserialize the class from a byte array. More...
+ 
+static Byte[] 	ToByteArray (RuntimeConfig config)
+ 	Serialize the class into a byte array. More...
+ 
+Public Attributes
+AssetRefMap 	Map
+ 	Asset reference of the Quantum map used with the upcoming game session. More...
+ 
+Int32 	Seed
+ 	Seed to initialize the randomization session under Frame.RNG. More...
+ 
+AssetRefSimulationConfig 	SimulationConfig
+ 	Asset reference to the SimulationConfig used with the upcoming game session. More...
+ 
+Detailed Description
+In contrast to the SimulationConfig, which has only static configuration data, the RuntimeConfig holds information that can be different from game to game.
+
+By default is defines for example what map to load and the random start seed. It is assembled from scratch each time starting a game.
+
+Developers can add custom data to quantum_code/quantum.state/RuntimeConfig.User.cs (don't forget to fill out the serialization methods).
+
+Like the DeterministicSessionConfig this config is distributed to every other client after the first player connected and joined the Quantum plugin.
+
+Member Function Documentation
+◆ Serialize()
+void Quantum.RuntimeConfig.Serialize	(	BitStream 	stream	)	
+inline
+Serializing the members to be send to the server plugin and other players.
+
+Parameters
+stream	Input output stream
+◆ Dump()
+String Quantum.RuntimeConfig.Dump	(		)	
+inline
+Dump the content into a human readable form.
+
+Returns
+String representation
+◆ ToByteArray()
+static Byte [] Quantum.RuntimeConfig.ToByteArray	(	RuntimeConfig 	config	)	
+inlinestatic
+Serialize the class into a byte array.
+
+Parameters
+config	Config to serialized
+Returns
+Byte array
+◆ FromByteArray()
+static RuntimeConfig Quantum.RuntimeConfig.FromByteArray	(	Byte[] 	data	)	
+inlinestatic
+Deserialize the class from a byte array.
+
+Parameters
+data	Config class in byte array form
+Returns
+New instance of the deserialized class
+Member Data Documentation
+◆ Seed
+Int32 Quantum.RuntimeConfig.Seed
+Seed to initialize the randomization session under Frame.RNG.
+
+◆ Map
+AssetRefMap Quantum.RuntimeConfig.Map
+Asset reference of the Quantum map used with the upcoming game session.
+
+◆ SimulationConfig
+AssetRefSimulationConfig Quantum.RuntimeConfig.SimulationConfig
+Asset reference to the SimulationConfig used with the upcoming game session.

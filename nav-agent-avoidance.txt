@@ -1,0 +1,77 @@
+Agent Avoidance
+Quantum implements a variation of the collision avoidance technique called Hybrid Reciprocal Velocity Obstacles. Here is an article that gives a glimpse at what is going on under the hood: Reciprocal Collision Avoidance and Navigation for Video Games.
+
+Navmesh Agent Prototype
+Quantum Agent Avoidance
+Setting Up Avoidance Agents
+Setting Up Avoidance Obstacles
+Jittering Agents
+
+Setting Up Avoidance Agents
+Open and review your simulation config: AvoidanceRange will be crucial to the quality and performance cost of the avoidance system. It defines the range in which agents start to influence each other. The range is measured between the radii of two agents.
+
+MaxAvoidanceCandidates defines the maximum number of avoidance candidates used by each agent. More candidates requires more memory and CPU time but also increase the quality when using lots of agents. First try to reduce the number and see with how little you can actually get away with. The higher the AvoidanceQuality and the higher the amount of agents that are meeting each other the higher this number needs to be.
+
+Set EnableAvoidance to off, if you want to have pathfinder and steering agents but never use the avoidance. This will optimize the performance because avoidance tasks are not scheduled. This is not required if the NavigationSystem has been removed from SystemSetup.cs completely.
+
+Simulation Config
+To activate avoidance add a NavMeshAvoidanceAgent component to an entity that already has a NavMeshPathfinder and a NavMeshSteeringAgent component.
+
+Then set up the avoidance section of its NavMeshAgentConfig:
+
+AvoidanceType.None will have the effect that the agent will not avoid others but others will avoid it. Much like a NavMeshAvoidanceObstacle component.
+
+Priority works as in Unity. Most important = 0. Least important = 99. Default = 50. Because the avoidance system relies on reciprocity the avoiding-work (who will avoid whom and how much) is always split between the agents. Higher priority agents do only 25% of the work while agents of the the same priority split the work 50/50.
+
+Use the Unity layers and set AvoidanceLayer and AvoidanceMask to filter agents. For example set some agents to be on the Heroes layer while others are on the Minions layer and set the mask for Heroes to ignore Minions.
+
+Toggle OverrideRadiusForAvoidance if you want a different Radius for avoidance than the one used for path-finding and steering.
+
+Solving avoidance while also trying to follow waypoints to steer around corners or through narrow passages can be hard. To mitigate the problem and to accept visual overlapping in favor of agents blocking each other toggle ReduceAvoidanceAtWaypoints. The avoidance applied when an agent is getting close to a waypoint is reduced. The ReduceAvoidanceFactor value is multiplied with the agent radius and then represents the distance in which the avoidance influence is reduced quadratically.
+
+Toggle DebugAvoidance to render gizmos into the scene view. The avoidance agent on the top is avoiding the moving agent on his right and the obstacle on his left. The red cones are the Velocity Obstacles of the agent on the top and green lines are the candidates while finally the white dot is the chosen candidate. The VO of a stationary object is truncated (see Navigation.Constants.VelocityObstacleTruncationFactor to play with that).
+
+Avoidance Agent Debug Gizmos
+Back To Top
+ 
+
+Setting Up Avoidance Obstacles
+Avoidance Obstacles are static or moving entities that influence the avoidance behavior of Navmesh agents but are no agents themselves. They do not influence the path finder and should not be used to block parts of the game level.
+
+A NavMeshAvoidanceObstacle component requires a Transform2/3D component to work properly.
+
+If the entity that has a NavMeshAvoidanceObstacle component is moving, other agents require its velocity information to predict its future position. Be sure to regularly update the property NavMeshAvoidanceObstacle.Velocity manually.
+
+Set up an Avoidance Obstacle:
+
+as an EntityPrototype component in Unity:
+Avoidance Obstacle Prototype
+or as a Quantum component in source code:
+var c = f.Create();
+f.Set(c, new Transform2D { Position = position });
+var obstacle = new NavMeshAvoidanceObstacle();
+obstacle.AvoidanceLayer = 0;
+obstacle.Radius = FP._0_50;
+obstacle.Velocity = FPVector2.Up;
+f.Set(c, obstacle);
+Back To Top
+ 
+
+Jittering Agents
+Solving avoidance with multiple agents moving different direction can cause the agents to switch their target direction very rapidly until finding a good course. To mitigate this the Angular Speed of the agents can be tuned down or additional smoothing is applied in the view by overriding the EntityView like this. The blending math is just one proposal.
+
+using UnityEngine;
+
+public class SmoothRotationEntityView : EntityView {
+  private Quaternion rotation;
+  public float Blending;
+
+  protected override void ApplyTransform(ref UpdatePostionParameter param) {
+    // Override this in subclass to change how the new position is applied to the transform.
+    transform.position = param.NewPosition + param.ErrorVisualVector;
+
+    // Unity's quaternion multiplication is equivalent to applying rhs then lhs (despite their doc saying the opposite)
+    rotation = param.ErrorVisualQuaternion * param.NewRotation;
+    transform.rotation = Quaternion.Lerp(transform.rotation, rotation, Time.deltaTime * Blending);
+  }
+}

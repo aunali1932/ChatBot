@@ -1,0 +1,56 @@
+Extending Assets for Unity
+Overview
+Example
+Access At Runtime
+Access At Edit-time
+
+Overview
+Quantum assets can be extended with Unity-specific data not relevant for the simulation like data for the UI (colors, texts, icons...). This is done with the use of partial classes.
+
+Back To Top
+ 
+
+Example
+Let's take the CharacterSpec asset as an example. Its ScriptableObject-based wrapper in Unity is called CharacterSpecAsset and is the type which needs to extended.
+
+public partial class CharacterSpecAsset {
+  [Header("Unity")]
+  public Sprtie Icon;
+  public Color Color;
+  public string DisplayName;
+}
+These fields can only be accessed in the View (Unity) and cannot be accessed or used in the simulation (Quantum).
+The newly created partial class needs to be added to the same assembly as the original definition of CharacterSpecAsset. By default, all Unity-side Quantum code belongs to the PhotonQuantum assembly.
+
+To ensure the partial class belongs to the correct assembly use one of the following approaches:
+
+Save the class in Assets/Photon/Quantum/User directory.
+Save the class in any directory that has an AssemblyDefinitionReference asset pointing to the PhotonQuantum assembly.
+Delete Assets/Photon/Quantum/PhotonQuantum.asmdef. This will make Quantum a part of the main assembly. Note that this step needs to be repeated after each Quantum SDK update.
+Back To Top
+ 
+
+Access At Runtime
+To access the extra fields at runtime, use the UnityDB.FindAsset<T>() method.
+
+CharacterSpecAsset characterSpecAsset = UnityDB.FindAsset<CharacterSpecAsset>(guid);
+Debug.Log(characterSpecAsset.DisplayName);
+Alternatively, the code-generated GetUnityAsset() extension methods can be used:
+
+CharacterSpec characterSpec = frame.FindAsset<CharacterSpec>(guid);
+CharacterSpecAsset characterSpecAsset = characterSpec.GetUnityAsset();
+Debug.Log(characterSpecAsset.DisplayName);
+Both of the approaches will result in the asset being loaded into Quantum's AssetDB using the appropriate method, as discussed here: resources, addressables and asset bundles.
+
+Back To Top
+ 
+
+Access At Edit-time
+To load an asset using its path while in the Unity Editor, the UnityEditor.AssetDataBase.LoadAssetAtPath<T>() method can be used.
+
+CharacterSpecAsset characterSpecAsset = UnityEditor.AssetDatabase.LoadAssetAtPath<CharacterSpecAsset>(path);
+Debug.Log(characterSpecAsset.DisplayName);
+Alternatively, the asset can be loaded using its AssetGuid via the UnityDB.FindAssetForInspector() method and casting the result to the correct type.
+
+CharacterSpecAsset characterSpecAsset = (CharacterSpecAsset)UnityDB.FindAssetForInspector(guid);
+Debug.Log(characterSpecAsset.DisplayName);
