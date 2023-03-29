@@ -7,6 +7,8 @@ namespace Quantum
 	[AssetObjectConfig(GenerateLinkingScripts = true, GenerateAssetCreateMenu = false, GenerateAssetResetMethod = false)]
 	public unsafe partial class HFSMState : AssetObject
 	{
+		// ========== PUBLIC MEMBERS ==================================================================================
+
 		public string Label;
 		public AssetRefAIAction[] OnUpdateLinks;
 		public AssetRefAIAction[] OnEnterLinks;
@@ -27,6 +29,8 @@ namespace Quantum
 		public HFSMState[] Children;
 		[NonSerialized]
 		public HFSMState Parent;
+
+		// ========== AssetObject INTERFACE ===========================================================================
 
 		public override void Loaded(IResourceManager resourceManager, Native.Allocator allocator)
 		{
@@ -76,7 +80,9 @@ namespace Quantum
 			}
 		}
 
-		internal Boolean UpdateState(Frame frame, FP deltaTime, HFSMData* hfsmData, EntityRef entity)
+		// ========== INTERNAL METHODS ================================================================================
+
+		internal Boolean UpdateState(FrameThreadSafe frame, FP deltaTime, HFSMData* hfsmData, EntityRef entity)
 		{
 			HFSMState parent = Parent;
 			Boolean transition = false;
@@ -95,7 +101,7 @@ namespace Quantum
 			return CheckStateTransitions(frame, hfsmData, entity, 0);
 		}
 
-		internal Boolean Event(Frame frame, HFSMData* hfsmData, EntityRef entity, Int32 eventInt)
+		internal Boolean Event(FrameThreadSafe frame, HFSMData* hfsmData, EntityRef entity, Int32 eventInt)
 		{
 			HFSMState p = Parent;
 			Boolean transition = false;
@@ -112,99 +118,18 @@ namespace Quantum
 			return CheckStateTransitions(frame, hfsmData, entity, eventInt);
 		}
 
-		private void DoUpdateActions(Frame frame, EntityRef entity)
-		{
-			for (int i = 0; i < OnUpdate.Length; i++)
-			{
-				OnUpdate[i].Update(frame, entity);
-				int nextAction = OnUpdate[i].NextAction(frame, entity);
-				if (nextAction > i)
-				{
-					i = nextAction;
-				}
-			}
-		}
-		private void DoEnterActions(Frame frame, EntityRef entity)
-		{
-			for (int i = 0; i < OnEnter.Length; i++)
-			{
-				OnEnter[i].Update(frame, entity);
-				int nextAction = OnEnter[i].NextAction(frame, entity);
-				if (nextAction > i)
-				{
-					i = nextAction;
-				}
-			}
-		}
-		private void DoExitActions(Frame frame, EntityRef entity)
-		{
-			for (int i = 0; i < OnExit.Length; i++)
-			{
-				OnExit[i].Update(frame, entity);
-				int nextAction = OnExit[i].NextAction(frame, entity);
-				if (nextAction > i)
-				{
-					i = nextAction;
-				}
-			}
-		}
-
-		private bool CheckStateTransitions(Frame frame, HFSMData* hfsmData, EntityRef entity, Int32 eventKey = 0)
-		{
-			hfsmData->Time = *hfsmData->Times.GetPointer(Level);
-
-			return CheckTransitions(frame, Transitions, hfsmData, entity, eventKey);
-		}
-
-		private static bool CheckTransitions(Frame frame, HFSMTransition[] transitions, HFSMData* hfsmData, EntityRef entity, int eventKey, int depth = 0)
-		{
-			// Just to avoid accidental loops
-			if (depth == 10)
-				return false;
-
-			if (transitions == null)
-				return false;
-
-			for (int i = 0; i < transitions.Length; i++)
-			{
-				var transition = transitions[i];
-
-				if (transition.State == null && transition.TransitionSet == null)
-					continue;
-
-				// Only consider evaluating the event if this transition HAS a event as requisite (EventKey != 0)
-				if (transition.EventKey != 0 && transition.EventKey != eventKey)
-					continue;
-
-				if (transition.Decision != null && transition.Decision.Decide(frame, entity) == false)
-					continue;
-
-				if (transition.State != null)
-				{
-					HFSMManager.ChangeState(transition.State, frame, hfsmData, entity, transition.Id);
-					return true;
-				}
-				else if (CheckTransitions(frame, transition.TransitionSet.Transitions, hfsmData, entity, eventKey, depth + 1) == true)
-				{
-					return true;
-				}
-			}
-
-			return false;
-		}
-
-		internal void EnterState(Frame frame, HFSMData* hfsmData, EntityRef entity)
+		internal void EnterState(FrameThreadSafe frame, HFSMData* hfsmData, EntityRef entity)
 		{
 			*hfsmData->Times.GetPointer(Level) = FP._0;
 			DoEnterActions(frame, entity);
 			if (Children != null && Children.Length > 0)
 			{
 				HFSMState child = Children[0];
-				HFSMManager.ChangeState(child, frame, hfsmData, entity, "");
+				HFSMManager.ThreadSafe.ChangeState(child, frame, hfsmData, entity, "");
 			}
 		}
 
-		internal void ExitState(HFSMState nextState, Frame frame, HFSMData* hfsmData, EntityRef entity)
+		internal void ExitState(HFSMState nextState, FrameThreadSafe frame, HFSMData* hfsmData, EntityRef entity)
 		{
 			if (nextState != null && nextState.IsChildOf(this) == true)
 				return;
@@ -224,6 +149,91 @@ namespace Quantum
 				return true;
 
 			return parent.IsChildOf(state);
+		}
+
+		// ========== PRIVATE METHODS =================================================================================
+
+		private void DoUpdateActions(FrameThreadSafe frame, EntityRef entity)
+		{
+			for (int i = 0; i < OnUpdate.Length; i++)
+			{
+				OnUpdate[i].Update(frame, entity);
+				int nextAction = OnUpdate[i].NextActionThreadSafe(frame, entity);
+				if (nextAction > i)
+				{
+					i = nextAction;
+				}
+			}
+		}
+
+		private void DoEnterActions(FrameThreadSafe frame, EntityRef entity)
+		{
+			for (int i = 0; i < OnEnter.Length; i++)
+			{
+				OnEnter[i].Update(frame, entity);
+				int nextAction = OnEnter[i].NextActionThreadSafe(frame, entity);
+				if (nextAction > i)
+				{
+					i = nextAction;
+				}
+			}
+		}
+
+		private void DoExitActions(FrameThreadSafe frame, EntityRef entity)
+		{
+			for (int i = 0; i < OnExit.Length; i++)
+			{
+				OnExit[i].Update(frame, entity);
+				int nextAction = OnExit[i].NextActionThreadSafe(frame, entity);
+				if (nextAction > i)
+				{
+					i = nextAction;
+				}
+			}
+		}
+
+		private bool CheckStateTransitions(FrameThreadSafe frame, HFSMData* hfsmData, EntityRef entity, Int32 eventKey = 0)
+		{
+			hfsmData->Time = *hfsmData->Times.GetPointer(Level);
+
+			return CheckTransitions(frame, Transitions, hfsmData, entity, eventKey);
+		}
+
+		private static bool CheckTransitions(FrameThreadSafe frame, HFSMTransition[] transitions, HFSMData* hfsmData, EntityRef entity, int eventKey, int depth = 0)
+		{
+			// Just to avoid accidental loops
+			if (depth == 10)
+				return false;
+
+			if (transitions == null)
+				return false;
+
+			for (int i = 0; i < transitions.Length; i++)
+			{
+				var transition = transitions[i];
+
+				if (transition.State == null && transition.TransitionSet == null)
+					continue;
+
+				// Only consider evaluating the event if this transition HAS a event as requisite (EventKey != 0)
+				if (transition.EventKey != 0 && transition.EventKey != eventKey)
+					continue;
+
+				if (transition.Decision != null && transition.Decision.DecideThreadSafe(frame, entity) == false)
+					continue;
+
+				if (transition.State != null)
+				{
+					HFSMManager.ThreadSafe.ChangeState(transition.State, frame, hfsmData, entity, transition.Id);
+					return true;
+				}
+				else if (CheckTransitions(frame, transition.TransitionSet.Transitions, hfsmData, entity, eventKey, depth + 1) == true)
+				{
+					return true;
+				}
+			}
+
+			return false;
 		}
 	}
 }

@@ -5,6 +5,8 @@ namespace Quantum
 	[Serializable]
 	public class HFSMTransition
 	{
+		// ========== PUBLIC MEMBERS ==================================================================================
+
 		public string Id;
 
 		public Int32 EventKey = 0;
@@ -18,6 +20,8 @@ namespace Quantum
 		public HFSMState State;
 		[NonSerialized]
 		public HFSMTransitionSet TransitionSet;
+
+		// ========== PUBLIC METHODS ==================================================================================
 
 		public void Setup(IResourceManager resourceManager)
 		{

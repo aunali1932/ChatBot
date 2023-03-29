@@ -5,9 +5,15 @@ namespace Quantum
 {
 	public abstract partial class HFSMLogicalDecision : HFSMDecision
 	{
+		// ========== PUBLIC MEMBERS ==================================================================================
+
 		public AssetRefHFSMDecision[] Decisions;
 
+		// ========== PROTECTED MEMBERS ===============================================================================
+
 		protected HFSMDecision[] _decisions;
+
+		// ========== AssetObject INTERFACE ===========================================================================
 
 		public override void Loaded(IResourceManager resourceManager, Native.Allocator allocator)
 		{
@@ -24,45 +30,65 @@ namespace Quantum
 		}
 	}
 
+	// ============================================================================================================
+
 	[Serializable]
 	[AssetObjectConfig(GenerateLinkingScripts = true, GenerateAssetCreateMenu = false, GenerateAssetResetMethod = false)]
 	public partial class HFSMOrDecision : HFSMLogicalDecision
 	{
-		public override unsafe bool Decide(Frame frame, EntityRef entity)
+		public override bool DecideThreadSafe(FrameThreadSafe frame, EntityRef entity)
+		{
+			return CheckDecisions(frame, entity);
+		}
+
+		private bool CheckDecisions(FrameThreadSafe frame, EntityRef entity)
 		{
 			foreach (var decision in _decisions)
 			{
-				if (decision.Decide(frame, entity))
+				if (decision.DecideThreadSafe(frame, entity) == true)
 					return true;
 			}
 			return false;
 		}
 	}
 
+	// ============================================================================================================
 
 	[Serializable]
 	[AssetObjectConfig(GenerateLinkingScripts = true, GenerateAssetCreateMenu = false, GenerateAssetResetMethod = false)]
 	public partial class HFSMAndDecision : HFSMLogicalDecision
 	{
-		public override unsafe bool Decide(Frame frame, EntityRef entity)
+		public override bool DecideThreadSafe(FrameThreadSafe frame, EntityRef entity)
+		{
+			return CheckDecisions(frame, entity);
+		}
+
+		public bool CheckDecisions(FrameThreadSafe frame, EntityRef entity)
 		{
 			foreach (var decision in _decisions)
 			{
-				if (!decision.Decide(frame, entity))
+				if (decision.DecideThreadSafe(frame, entity) == false)
 					return false;
 			}
 			return true;
 		}
 	}
 
+	// ============================================================================================================
 
 	[Serializable]
 	[AssetObjectConfig(GenerateLinkingScripts = true, GenerateAssetCreateMenu = false, GenerateAssetResetMethod = false)]
 	public partial class HFSMNotDecision : HFSMLogicalDecision
 	{
-		public override unsafe bool Decide(Frame frame, EntityRef entity)
+
+		public override bool DecideThreadSafe(FrameThreadSafe frame, EntityRef entity)
 		{
-			return !_decisions[0].Decide(frame, entity);
+			return CheckDecisions(frame, entity);
+		}
+
+		public bool CheckDecisions(FrameThreadSafe frame, EntityRef entity)
+		{
+			return !_decisions[0].DecideThreadSafe(frame, entity);
 		}
 	}
 }

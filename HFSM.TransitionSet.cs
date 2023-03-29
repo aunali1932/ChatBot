@@ -5,6 +5,8 @@ namespace Quantum
 {
 	public partial class HFSMTransitionSet
 	{
+		// ========== PUBLIC MEMBERS ==================================================================================
+
 		public string Label;
 		public AssetRefHFSMDecision PrerequisiteLink;
 
@@ -12,6 +14,8 @@ namespace Quantum
 
 		[NonSerialized]
 		public HFSMDecision Prerequisite;
+
+		// ========== AssetObject INTERFACE ===========================================================================
 
 		public override void Loaded(IResourceManager resourceManager, Native.Allocator allocator)
 		{
