@@ -1,0 +1,194 @@
+Introduction
+Quantum is agnostic to the concept of player entities. All entities are the same in the eyes of the simulation. Therefore, when we refer to "the player" in this document, we mean the player controlled entity.
+
+Back To Top
+ 
+
+Player Identification
+A player can be identified in two ways:
+
+their player index; and,
+their PlayerRef.
+Back To Top
+ 
+
+Player Index Assignment
+The Quantum player index is assigned by the server based on the order in which the Session.Join() messages arrive. This is not to be confused with the Photon Id which is based on order in players joined the Photon room. It is not possible to set the "Desired Quantum Id" on a Photon Player.
+
+N.B.: In the event of a disconnect, we guarantee the client gets the same player index IF it reconnects with the same ClientId; regardless of their Photon Id - public static QuantumRunner StartGame(String clientId, Int32 playerCount, StartParameters param).
+
+Back To Top
+ 
+
+Player Index Vs PlayerRef
+The PlayerRef is a wrapper for the player index in the Quantum ECS. The PlayerRef is 1-based, while player index starts at 0. The reason is that default(PlayerRef) will return a "null/invalid" player ref struct for convenience.
+
+There are automatic cast operators that can cast an Integer to a PlayerRef and vice-versa.
+
+default(PlayerRef), internally a 0, means NOBODY
+PlayerRef, internally 1, is the same as player index 0
+PlayerRef, internally 2, is the same as player index 1
+Back To Top
+ 
+
+Photon Id
+You can identify a player's corresponding Photon Id via the Frame API:
+
+Frame.PlayerToActorId(PlayerRef player) converts a Quantum PlayerRef to an ActorId (Photon client id); or,
+Frame.ActorIdToAllPlayers(Int32 actorId) the reverse process of the previous method.
+Use this if you plan on showing player names via PhotonPlayer.Nickname for example.
+
+IMPORTANT: The Photon Id is irrelevant to the Quantum simulation.
+
+Back To Top
+ 
+
+Join The Game
+When a game starts, the followings things happen in sequence:
+
+QuantumRunner.Session.Join() sends join request to server with desired player count.
+The request is received by the server where it is validated and a confirmation is sent back to the user. If the information attached to the request is not valid, the request will be refused.
+The Start game message is received by the client.
+The player can now send and receive inputs.
+(OPTIONAL) - In case of a late join, the client may receive a snapshot-resync; in this case step 4 would not be sending inputs while waiting for the snapshot.
+(OPTIONAL) - SendPlayerData can now be used. It may be used as many times as needed during the game session (at game start and/or during the session itself). Every time SendPlayerData is called, it sends a serialized version of RuntimePlayer to the server, which then attaches to a tick input set confirmation and thus deterministically triggers the signal.
+Config Sequence Diagram
+Sequence Diagram
+For more information on the configuration files involved, please refer to the Configuration Files document of the manual.
+
+Back To Top
+ 
+
+SendPlayerData
+QuantumGame.SendPlayerData(RuntimePlayer features) is a data path to deterministically inject a special kind of data (serialized RuntimePlayer) into the input stream. Although SendPlayerData is commonly called at game start to set up all the player; it is also possible to call it during the game session if the data needs to be updated.
+
+After starting, joining the Quantum Game the CallbackGameStarted callback fires. It is at this moment that each player may call the SendPlayerData method to be added as a player in everyone else's simulation. Calling this explicitly greatly simplifies the process for late-joining players.
+
+public class MyCallbacks : MonoBehaviour {
+  private void OnEnable() {
+    QuantumCallback.Subscribe<CallbackGameStarted>(this, OnGameStart);
+  }
+
+  private void OnGameStart(CallbackGameStarted callback) {
+    // paused on Start means waiting for Snapshot
+    if (callback.Game.Session.IsPaused) return;
+
+  // It needs to be sent for each local player.
+    foreach (var lp in callback.Game.GetLocalPlayers()) {
+      Debug.Log("CustomCallbacks - sending player: " + lp);
+      callback.Game.SendPlayerData(lp, new Quantum.RuntimePlayer { });
+    }
+  }
+}
+Back To Top
+ 
+
+Player Entities Are Instantiated In Local Mode But Not In Multiplayer Mode
+Most likely QuantumGame.SendPlayerData() was not executed for each player. If you are using the demo menus to start the game add the script CustomCallbacks.cs anywhere to the menu scene.
+
+Back To Top
+ 
+
+PlayerConnectedSystem
+To keep track of players' connection to a quantum session Input & Connection Flags are used. The PlayerConnectedSystem automates the procedure and notifies the simulation if a player has connected to the session or disconnected from it. To make use of the system, it has to be added to the SystemSetup.
+
+public static class SystemSetup {
+  public static SystemBase[] CreateSystems(RuntimeConfig gameConfig, SimulationConfig simulationConfig) {
+    return new SystemBase[] {
+      // pre-defined core systems
+      ...
+
+      new PlayerConnectedSystem(),
+
+      // custom systems
+      ...
+    }
+  }
+}
+In order to received the connection and disconnection callbacks the ISignalOnPlayerConnected and ISignalOnPlayerDisconnected have to be implemented in a system.
+
+Back To Top
+ 
+
+ISignalOnPlayerDataSet
+Implementing ISignalOnPlayerDataSet in a system give you access to public void OnPlayerDataSet(Frame f, PlayerRef playerRef). OnPlayerDataSet is called every time a serialized RuntimePlayer is part of a specific tick input.
+
+Back To Top
+ 
+
+RuntimePlayer
+The class RuntimePlayer is meant to hold player specific information such as for instance the character selected. For RuntimePlayer to work with your custom needs, you have to implement the serialization method - in the case of asset links, the GUID needs to be serialized.
+
+RuntimePlayer is a partial class in the quantum.code project. To facilitate upgrading SDKs and future proofing, your custom implementations are to be done in RuntimePlayer.User.cs. In here you can add the parameters you would like to specify for each player and their serialization can be implemented in the SerializeUserData method. The result will resemble this:
+
+namespace Quantum {
+  partial class RuntimePlayer {
+    public AssetRefCharacterSpec CharacterSpec;
+
+    partial void SerializeUserData(BitStream stream)
+    {
+      stream.Serialize(ref CharacterSpec.Id.Value);
+    }
+  }
+}
+Back To Top
+ 
+
+Accessing At Runtime
+The RuntimePlayer asset associated with a player can be retrieved by querying Frame.GetPlayerData() with their PlayerRef.
+
+public void OnPlayerDataSet(Frame f, PlayerRef player){
+    var data = f.GetPlayerData(player);
+}
+Back To Top
+ 
+
+Initializing A Player Entity
+The entity controlled by a player can be initialized at any point during the simulation. A common approach is to initialize it when the player connects(ISignalOnPlayerConnected) and / or the player data is received (ISignalOnPlayerDataSet).
+
+ISignalOnPlayerConnected: The player entity can be initialized with whatever information is already available in the simulation or the asset database.
+ISignalOnPlayerDataSet: The player entity can be initialized with the information associated with the player's RuntimePlayer specific information. This is convenient for things such as selected character model / skin or inventory loadout.
+Back To Top
+ 
+
+Simulation Vs View
+First, a few clarifications:
+
+From the simulation's perspective (Quantum), player controlled entity are entities with player input. It does not know of local or remote players.
+From the view's perspective (Unity), we poll input from the players on the local client.
+To recapt, in the simulation there is no such thing as "local" or "remote" players; however, in the view a player is either "local" or it is not.
+
+Photon.Deterministic.DeterministicGameMode.Local
+Photon.Deterministic.DeterministicGameMode.Multiplayer
+Photon.Deterministic.DeterministicGameMode.Replay
+Back To Top
+ 
+
+Max Amount Of Players
+The max player count is essential to know in advance for it defines how much space needs to be allocated inside the memory chunk for each frame. By default the maximum amount of players is 6. To change it add the following lines to any of your qtn-files:
+
+#define PLAYER_COUNT 8
+#pragma max_players PLAYER_COUNT
+The define acts like a define and can be used inside the DSL (e.g. for allocating arrays with the player count).
+The pragma actually defines how many player the simulation can handle.
+Back To Top
+ 
+
+Local Player
+Quantum offers to APIs in the View to check if a player is local:
+
+QuantumRunner.Default.Game.Session.IsLocalPlayer(int player); and,
+QuantumRunner.Default.Game.PlayerIsLocal(PlayerRef playerRef).
+Back To Top
+ 
+
+Multiple Local Players
+QuantumRunner.Default.Game.GetLocalPlayers() returns an array that is unique for every client and represents the indexes for players that your local machine controls in the Quantum simulation.
+
+It returns one index if there is only one local player. Should several players be on the same local machine controls, then the array will have the length of the local player count.
+These are exactly the same indexes that are passed into QuantumInput.Instance.PollInput(int player).
+The indexes are defined by the server (unless it is a local game).
+The indexes are always within [0, PlayerCount-1]. PlayerCount represents the total player count in the match. It is passed into QuantumRunner.StartGame.
+The index values are arbitrary (within the range of 0 to max players for this session) and depend on the order of multiple players connecting and disconnecting and when their messages reach the server.
+If a local machine has more than one player, the values are not necessarily consecutive.
+When rejoining the game you can be assigned the same player index as long as you call Session.Join() with the same GUID and the room has not been filled with new players since you disconnected.
